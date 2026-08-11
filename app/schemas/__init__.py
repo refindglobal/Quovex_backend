@@ -36,7 +36,7 @@ class UserProfileOut(BaseModel):
     avatar_url: Optional[str] = None
     country: Optional[str] = None
     state: Optional[str] = None
-    exam_tags: Optional[list] = None
+    exam_tags: List[str] = []
     primary_subject: Optional[str] = None
     points_total: int = 0
     verified_minutes_total: int = 0
@@ -61,7 +61,7 @@ class UserProfileOut(BaseModel):
     exam_target: Optional[str] = None
     study_goal: Optional[str] = None
     daily_target_hours: Optional[float] = None
-    blocked_apps: Optional[List[str]] = None
+    blocked_apps: List[str] = []
     study_time_preference: Optional[str] = None
     reset_time_hour: Optional[int] = 8
     lock_mode: Optional[str] = "STRICT"

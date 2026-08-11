@@ -112,6 +112,27 @@ async def streak_freeze(
     }
 
 
+@router.post("/me/gifts/welcome")
+async def claim_welcome_gift(
+    current_user: User = Depends(get_current_user),
+    db: DBSession = Depends(get_db),
+):
+    """Claim onboarding starter boost (+30 wallet minutes, 1 streak freeze, +50 XP)."""
+    current_user.wallet_minutes = (current_user.wallet_minutes or 120) + 30
+    current_user.points_total = (current_user.points_total or 0) + 50
+    now = datetime.now(timezone.utc)
+    if not current_user.streak_frozen_until or current_user.streak_frozen_until < now:
+        current_user.streak_frozen_until = now + timedelta(hours=24)
+    db.commit()
+    db.refresh(current_user)
+    return {
+        "status": "ok",
+        "wallet_minutes": current_user.wallet_minutes,
+        "points_total": current_user.points_total,
+        "message": "Welcome gift claimed successfully!"
+    }
+
+
 @router.get("/me/proficiency")
 async def get_my_proficiency(
     current_user: User = Depends(get_current_user),
