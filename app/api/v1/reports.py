@@ -29,7 +29,8 @@ async def get_latest_report(
         .first()
     )
     if not report:
-        raise HTTPException(status_code=404, detail=f"No {report_type} report found")
+        # On-demand generation when student requests report
+        report = generate_report(current_user, report_type, db)
     return report
 
 

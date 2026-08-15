@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     CEREBRAS_API_KEY: str = ""
     CEREBRAS_API_KEYS: str = ""
     CEREBRAS_MODEL: str = "gpt-oss-120b"
+    GROQ_API_KEY: str = ""
+    GROQ_API_KEYS: str = ""
+    GROQ_MODEL: str = "llama-3.3-70b-versatile"
     CELERY_BROKER_URL: str = "redis://localhost:6379/1"
     CELERY_RESULT_BACKEND: str = "redis://localhost:6379/2"
     ALLOWED_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:8000"]

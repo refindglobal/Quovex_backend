@@ -62,12 +62,22 @@ def _pick_api_key() -> str:
     return random.choice(keys) if keys else ""
 
 
+def _pick_groq_key() -> str:
+    keys_str = settings.GROQ_API_KEYS or settings.GROQ_API_KEY
+    if not keys_str:
+        return ""
+    keys = [k.strip() for k in keys_str.split(",") if k.strip()]
+    import random
+    return random.choice(keys) if keys else ""
+
+
 def _call_cerebras(prompt: str) -> dict:
     last_exc = None
-    for attempt in range(3):
+    # 1. Try Cerebras
+    for attempt in range(2):
         api_key = _pick_api_key()
         if not api_key:
-            raise ValueError("No Cerebras API keys configured")
+            break
         try:
             response = httpx.post(
                 "https://api.cerebras.ai/v1/chat/completions",
@@ -84,20 +94,52 @@ def _call_cerebras(prompt: str) -> dict:
                     "temperature": 0.7,
                     "max_tokens": 2048,
                 },
-                timeout=60,
+                timeout=30,
             )
             response.raise_for_status()
             content = response.json()["choices"][0]["message"]["content"]
             start = content.find("{")
             end = content.rfind("}") + 1
-            if start == -1 or end == 0:
-                raise ValueError("No JSON object found in response")
-            return json.loads(content[start:end])
+            if start != -1 and end > 0:
+                return json.loads(content[start:end])
         except Exception as e:
             last_exc = e
-            if attempt < 2:
-                time.sleep(1 + attempt)
-    raise last_exc
+            time.sleep(0.5)
+
+    # 2. Try Groq fallback
+    groq_key = _pick_groq_key()
+    if groq_key:
+        try:
+            logger.info("Falling back to Groq for report generation")
+            response = httpx.post(
+                "https://api.groq.com/openai/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {groq_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": settings.GROQ_MODEL,
+                    "messages": [
+                        {"role": "system", "content": "You are an expert AI study coach. Return only valid JSON object."},
+                        {"role": "user", "content": prompt},
+                    ],
+                    "temperature": 0.7,
+                    "max_tokens": 2048,
+                },
+                timeout=30,
+            )
+            response.raise_for_status()
+            content = response.json()["choices"][0]["message"]["content"]
+            start = content.find("{")
+            end = content.rfind("}") + 1
+            if start != -1 and end > 0:
+                return json.loads(content[start:end])
+        except Exception as e:
+            last_exc = e
+
+    if last_exc:
+        raise last_exc
+    raise ValueError("No AI API keys configured or available")
 
 
 def generate_report(user: User, report_type: str, db: DBSession) -> UserReport:

@@ -80,15 +80,28 @@ from app.services.doubt_solver_engine import solve_doubt_intelligently, detect_s
 async def solve_doubt(body: DoubtSolveIn, current_user: User = Depends(get_current_user), db: DBSession = Depends(get_db)):
     if not body.question_text or len(body.question_text.strip()) < 5:
         raise HTTPException(status_code=422, detail="Question text is too short")
-    steps, final_answer, subject, key_concepts, related_topics = solve_doubt_intelligently(body.question_text, body.subject)
+    subject = detect_subject(body.question_text, body.subject)
+    steps, final_answer, key_concepts, related_topics, question_type, confidence, confidence_label = solve_doubt_intelligently(
+        body.question_text, body.subject, body.follow_up_action
+    )
     doubt = Doubt(
         user_id=current_user.id, question_text=body.question_text.strip(), subject=subject,
         step_by_step_explanation=[{"step": s.step, "title": s.title, "content": s.content} for s in steps],
         final_answer=final_answer, key_concepts=key_concepts, related_topics=related_topics, is_bookmarked=False,
     )
     db.add(doubt); db.commit(); db.refresh(doubt)
-    return DoubtSolveOut(doubt_id=doubt.id, question_text=doubt.question_text, subject=doubt.subject,
-        steps=steps, final_answer=final_answer, key_concepts=key_concepts, related_topics=related_topics)
+    return DoubtSolveOut(
+        doubt_id=doubt.id,
+        question_text=doubt.question_text,
+        subject=doubt.subject,
+        question_type=question_type,
+        confidence=confidence,
+        confidence_label=confidence_label,
+        steps=steps,
+        final_answer=final_answer,
+        key_concepts=key_concepts,
+        related_topics=related_topics
+    )
 
 
 @router.get("/doubts/history", response_model=list[DoubtHistoryOut])

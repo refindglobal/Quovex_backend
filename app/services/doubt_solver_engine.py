@@ -12,7 +12,10 @@ NO escaped characters. Every answer reads like a real tutor explaining clearly.
 """
 import re
 import math
+import json
+import httpx
 from typing import List, Tuple, Optional
+from app.config import settings
 from app.schemas import DoubtStepOut
 
 # ─────────────────────────────────────────────────────────────
@@ -90,7 +93,7 @@ def classify_question_type(question: str) -> str:
     if any(t in low for t in conceptual_triggers):
         return "conceptual"
 
-    # Default: factual — direct "what is", "what are", "define", "state", "who discovered"
+    # Default: factual  --  direct "what is", "what are", "define", "state", "who discovered"
     return "factual"
 
 
@@ -115,39 +118,39 @@ def extract_numbers(text: str) -> List[float]:
 
 
 # ─────────────────────────────────────────────────────────────
-#  FACTUAL SOLVERS  (Answer / Why / Remember — 3 sections max)
+#  FACTUAL SOLVERS  (Answer / Why / Remember  --  3 sections max)
 # ─────────────────────────────────────────────────────────────
 
 def _factual_speed_of_light() -> Tuple[List[DoubtStepOut], str, List[str], List[str]]:
     steps = [
         DoubtStepOut(
             step=1, title="The Answer",
-            content="The speed of light in a vacuum is exactly 299,792,458 metres per second — "
-                    "commonly written as 3.00 × 10^8 m/s.\n\n"
+            content="The speed of light in a vacuum is exactly 299,792,458 metres per second -- "
+                    "commonly written as 3.00 x 10^8 m/s.\n\n"
                     "This constant is so important that it has its own symbol: c."
         ),
         DoubtStepOut(
             step=2, title="Why is it this value?",
             content="Light is an electromagnetic wave. Its speed in vacuum is fixed by two "
-                    "fundamental constants of nature — the permittivity of free space (ε₀) "
-                    "and the permeability of free space (μ₀).\n\n"
-                    "The relationship is: c = 1 / √(ε₀ × μ₀)\n\n"
-                    "In any other medium, light slows down. In water (refractive index ≈ 1.33), "
-                    "light travels at about 2.25 × 10^8 m/s."
+                    "fundamental constants of nature -- the permittivity of free space "
+                    "and the permeability of free space.\n\n"
+                    "The relationship is: c = 1 / sqrt(permittivity x permeability)\n\n"
+                    "In any other medium, light slows down. In water (refractive index approx 1.33), "
+                    "light travels at about 2.25 x 10^8 m/s."
         ),
         DoubtStepOut(
             step=3, title="Remember for Your Exam",
-            content="c = 3.00 × 10^8 m/s  (in vacuum)\n\n"
+            content="c = 3.00 x 10^8 m/s  (in vacuum)\n\n"
                     "Speed in a medium: v = c / n  (where n is the refractive index)\n\n"
-                    "Einstein's famous result: E = mc²  (mass-energy equivalence)\n\n"
-                    "c is the cosmic speed limit — nothing with mass can reach or exceed it."
+                    "Einstein's famous result: E = m x c^2  (mass-energy equivalence)\n\n"
+                    "c is the cosmic speed limit -- nothing with mass can reach or exceed it."
         )
     ]
     return (
         steps,
-        "The speed of light in vacuum is 299,792,458 m/s (approximately 3.00 × 10^8 m/s), "
+        "The speed of light in vacuum is 299,792,458 m/s (approximately 3.00 x 10^8 m/s), "
         "denoted by c. It is the fastest speed possible in the universe.",
-        ["c = 3.00 × 10^8 m/s", "v = c / n", "E = mc²"],
+        ["c = 3.00 x 10^8 m/s", "v = c / n", "E = m x c^2"],
         ["Optics", "Electromagnetism", "Special Relativity"]
     )
 
@@ -164,21 +167,21 @@ def _factual_newtons_second_law() -> Tuple[List[DoubtStepOut], str, List[str], L
         ),
         DoubtStepOut(
             step=2, title="The Core Formula",
-            content="Force = Mass × Acceleration\n\n"
-                    "F = m × a\n\n"
+            content="Force = Mass  x  Acceleration\n\n"
+                    "F = m  x  a\n\n"
                     "Rearranging:\n"
                     "  Acceleration (a) = F / m\n"
                     "  Mass (m) = F / a\n\n"
                     "SI Units: Force in Newtons (N), Mass in kilograms (kg), "
-                    "Acceleration in m/s²\n"
-                    "1 Newton = 1 kg × m/s²"
+                    "Acceleration in m/s^2\n"
+                    "1 Newton = 1 kg  x  m/s^2"
         ),
         DoubtStepOut(
             step=3, title="Real-Life Example",
             content="When a cricketer catches a ball, he pulls his hands backward. "
                     "This increases the time over which the ball decelerates. "
                     "Since Force = Change in Momentum / Time, a longer time means less force on "
-                    "his hands — which is why it hurts less than a rigid catch.\n\n"
+                    "his hands  --  which is why it hurts less than a rigid catch.\n\n"
                     "Another example: pushing a shopping trolley. An empty trolley (less mass) "
                     "accelerates much faster than a full one with the same push force."
         )
@@ -186,9 +189,9 @@ def _factual_newtons_second_law() -> Tuple[List[DoubtStepOut], str, List[str], L
     return (
         steps,
         "Newton's Second Law: the net force on an object equals its mass multiplied by its "
-        "acceleration. Formula: F = m × a. A larger force causes greater acceleration; "
+        "acceleration. Formula: F = m  x  a. A larger force causes greater acceleration; "
         "a larger mass resists acceleration more.",
-        ["F = m × a", "a = F / m", "1 N = 1 kg·m/s²", "Impulse = F × t"],
+        ["F = m  x  a", "a = F / m", "1 N = 1 kg·m/s^2", "Impulse = F  x  t"],
         ["Laws of Motion", "Dynamics", "Classical Mechanics"]
     )
 
@@ -201,12 +204,12 @@ def _factual_newtons_first_law() -> Tuple[List[DoubtStepOut], str, List[str], Li
                     "An object at rest stays at rest, and an object in motion continues moving "
                     "at the same speed in the same direction, unless acted upon by an external "
                     "force.\n\n"
-                    "This property is called inertia — the natural resistance of objects to "
+                    "This property is called inertia  --  the natural resistance of objects to "
                     "changes in their state of motion."
         ),
         DoubtStepOut(
             step=2, title="What is Inertia?",
-            content="Inertia is not a force — it is a property. The more massive an object, "
+            content="Inertia is not a force  --  it is a property. The more massive an object, "
                     "the greater its inertia, meaning it is harder to start moving, stop, "
                     "or change direction.\n\n"
                     "Mathematical condition: If the net force on an object is zero (F_net = 0), "
@@ -214,11 +217,11 @@ def _factual_newtons_first_law() -> Tuple[List[DoubtStepOut], str, List[str], Li
         ),
         DoubtStepOut(
             step=3, title="Everyday Examples",
-            content="1. You lurch forward when a bus brakes suddenly — your body's inertia "
+            content="1. You lurch forward when a bus brakes suddenly  --  your body's inertia "
                     "wants to keep moving forward while the bus stops.\n\n"
-                    "2. A ball rolled on a frictionless surface would continue forever — "
+                    "2. A ball rolled on a frictionless surface would continue forever  --  "
                     "friction is the external force that normally slows it.\n\n"
-                    "3. A tablecloth pulled quickly from under dishes — inertia keeps the "
+                    "3. A tablecloth pulled quickly from under dishes  --  inertia keeps the "
                     "dishes roughly in place."
         )
     ]
@@ -250,15 +253,15 @@ def _factual_unit_of_current() -> Tuple[List[DoubtStepOut], str, List[str], List
                     "  t = Time (seconds)\n\n"
                     "So: 1 Ampere = 1 Coulomb of charge flowing per second.\n\n"
                     "In terms of electrons: 1 Ampere means approximately "
-                    "6.24 × 10^18 electrons flowing past a point every second."
+                    "6.24  x  10^18 electrons flowing past a point every second."
         ),
         DoubtStepOut(
             step=3, title="Related Units to Remember",
-            content="Current (I)     →  Ampere (A)\n"
-                    "Voltage (V)     →  Volt (V = J/C)\n"
-                    "Resistance (R)  →  Ohm (Ω = V/A)\n"
-                    "Power (P)       →  Watt (W = V × A)\n"
-                    "Charge (Q)      →  Coulomb (C = A × s)\n\n"
+            content="Current (I)     ->  Ampere (A)\n"
+                    "Voltage (V)     ->  Volt (V = J/C)\n"
+                    "Resistance (R)  ->  Ohm ( Ohm = V/A)\n"
+                    "Power (P)       ->  Watt (W = V  x  A)\n"
+                    "Charge (Q)      ->  Coulomb (C = A  x  s)\n\n"
                     "Current is measured using an Ammeter, connected in series in the circuit."
         )
     ]
@@ -266,13 +269,13 @@ def _factual_unit_of_current() -> Tuple[List[DoubtStepOut], str, List[str], List
         steps,
         "The SI unit of electric current is the Ampere (A). "
         "1 Ampere = 1 Coulomb of charge per second. Formula: I = Q / t.",
-        ["I = Q / t", "1 A = 1 C/s", "V = I × R"],
+        ["I = Q / t", "1 A = 1 C/s", "V = I  x  R"],
         ["Current Electricity", "Electrostatics", "Circuit Theory"]
     )
 
 
 # ─────────────────────────────────────────────────────────────
-#  NUMERICAL SOLVERS  (Given → Formula → Substitute → Calculate → Answer)
+#  NUMERICAL SOLVERS  (Given -> Formula -> Substitute -> Calculate -> Answer)
 # ─────────────────────────────────────────────────────────────
 
 def _numerical_f_equals_ma(m: float, a: float) -> Tuple[List[DoubtStepOut], str, List[str], List[str]]:
@@ -280,13 +283,13 @@ def _numerical_f_equals_ma(m: float, a: float) -> Tuple[List[DoubtStepOut], str,
     steps = [
         DoubtStepOut(step=1, title="Given Information",
             content=f"Mass (m) = {m} kg\n"
-                    f"Acceleration (a) = {a} m/s²\n"
+                    f"Acceleration (a) = {a} m/s^2\n"
                     f"Find: Net Force (F)"),
         DoubtStepOut(step=2, title="Formula to Use",
-            content="Newton's Second Law:\n\nF = m × a\n\n"
+            content="Newton's Second Law:\n\nF = m  x  a\n\n"
                     "Force equals mass times acceleration."),
         DoubtStepOut(step=3, title="Substitute the Values",
-            content=f"F = {m} × {a}"),
+            content=f"F = {m}  x  {a}"),
         DoubtStepOut(step=4, title="Calculate",
             content=f"F = {F:.2f} N"),
         DoubtStepOut(step=5, title="Answer",
@@ -296,8 +299,8 @@ def _numerical_f_equals_ma(m: float, a: float) -> Tuple[List[DoubtStepOut], str,
     ]
     return (
         steps,
-        f"The net force is {F:.2f} N. Using F = m × a = {m} × {a}.",
-        ["F = m × a", f"F = {m} × {a} = {F:.2f} N"],
+        f"The net force is {F:.2f} N. Using F = m  x  a = {m}  x  {a}.",
+        ["F = m  x  a", f"F = {m}  x  {a} = {F:.2f} N"],
         ["Newton's Second Law", "Dynamics"]
     )
 
@@ -334,15 +337,15 @@ def _numerical_free_fall(h: float) -> Tuple[List[DoubtStepOut], str, List[str], 
         DoubtStepOut(step=1, title="Given Information",
             content=f"Height (h) = {h} m\n"
                     f"Initial velocity (u) = 0 m/s  (object dropped, not thrown)\n"
-                    f"Acceleration due to gravity (g) = 9.8 m/s²\n"
+                    f"Acceleration due to gravity (g) = 9.8 m/s^2\n"
                     f"Find: time to reach ground and final velocity"),
         DoubtStepOut(step=2, title="Formula to Use",
             content="For an object dropped from rest:\n\n"
-                    "Time of fall:       h = ½ × g × t²   →   t = √(2h / g)\n"
-                    "Final velocity:     v² = 2 × g × h   →   v = √(2gh)"),
+                    "Time of fall:       h = 1/2  x  g  x  t^2   ->   t = sqrt(2h / g)\n"
+                    "Final velocity:     v^2 = 2  x  g  x  h   ->   v = sqrt(2gh)"),
         DoubtStepOut(step=3, title="Substitute the Values",
-            content=f"t = √(2 × {h} / 9.8) = √({(2*h)/g:.3f})\n\n"
-                    f"v = √(2 × 9.8 × {h}) = √({2*g*h:.2f})"),
+            content=f"t = sqrt(2  x  {h} / 9.8) = sqrt({(2*h)/g:.3f})\n\n"
+                    f"v = sqrt(2  x  9.8  x  {h}) = sqrt({2*g*h:.2f})"),
         DoubtStepOut(step=4, title="Calculate",
             content=f"Time to reach ground:   t = {t:.2f} seconds\n"
                     f"Final impact velocity:  v = {v:.2f} m/s  ({v*3.6:.1f} km/h)"),
@@ -353,8 +356,8 @@ def _numerical_free_fall(h: float) -> Tuple[List[DoubtStepOut], str, List[str], 
     return (
         steps,
         f"Time = {t:.2f} s, Impact velocity = {v:.2f} m/s. "
-        f"Using t = √(2h/g) and v = √(2gh) with g = 9.8 m/s².",
-        ["t = √(2h/g)", "v = √(2gh)", "h = ½gt²"],
+        f"Using t = sqrt(2h/g) and v = sqrt(2gh) with g = 9.8 m/s^2.",
+        ["t = sqrt(2h/g)", "v = sqrt(2gh)", "h = 1/2gt^2"],
         ["Free Fall", "Kinematics", "Gravitation"]
     )
 
@@ -369,35 +372,35 @@ def _numerical_incline(m: float, theta_deg: float) -> Tuple[List[DoubtStepOut], 
         DoubtStepOut(step=1, title="Given Information",
             content=f"Mass (m) = {m} kg\n"
                     f"Angle of incline = {theta_deg}°\n"
-                    f"g = 9.8 m/s²  (assume smooth/frictionless unless stated)\n"
+                    f"g = 9.8 m/s^2  (assume smooth/frictionless unless stated)\n"
                     f"Find: acceleration down the slope and the driving force"),
         DoubtStepOut(step=2, title="Understanding the Forces",
             content="Gravity pulls the object straight down with force mg.\n\n"
                     "On an inclined plane, this splits into two components:\n"
-                    f"  Along the slope (causes motion): mg × sin({theta_deg}°)\n"
-                    f"  Perpendicular to slope (normal force): mg × cos({theta_deg}°)\n\n"
+                    f"  Along the slope (causes motion): mg  x  sin({theta_deg}°)\n"
+                    f"  Perpendicular to slope (normal force): mg  x  cos({theta_deg}°)\n\n"
                     "The normal force prevents the object from going through the surface. "
                     "The parallel component is what slides the object down."),
         DoubtStepOut(step=3, title="Substitute",
-            content=f"Acceleration along slope:  a = g × sin({theta_deg}°)\n"
-                    f"  = 9.8 × sin({theta_deg}°)\n"
-                    f"  = 9.8 × {math.sin(theta_rad):.4f}\n\n"
-                    f"Normal force:  N = m × g × cos({theta_deg}°)\n"
-                    f"  = {m} × 9.8 × {math.cos(theta_rad):.4f}"),
+            content=f"Acceleration along slope:  a = g  x  sin({theta_deg}°)\n"
+                    f"  = 9.8  x  sin({theta_deg}°)\n"
+                    f"  = 9.8  x  {math.sin(theta_rad):.4f}\n\n"
+                    f"Normal force:  N = m  x  g  x  cos({theta_deg}°)\n"
+                    f"  = {m}  x  9.8  x  {math.cos(theta_rad):.4f}"),
         DoubtStepOut(step=4, title="Calculate",
-            content=f"Acceleration down slope:  a = {a:.2f} m/s²\n"
+            content=f"Acceleration down slope:  a = {a:.2f} m/s^2\n"
                     f"Driving force along slope: F = {F_parallel:.2f} N\n"
                     f"Normal force: N = {N:.2f} N"),
         DoubtStepOut(step=5, title="Answer",
             content=f"The {m} kg object slides down the {theta_deg}° incline "
-                    f"with an acceleration of {a:.2f} m/s². "
+                    f"with an acceleration of {a:.2f} m/s^2. "
                     f"The force pulling it down the slope is {F_parallel:.2f} N.")
     ]
     return (
         steps,
-        f"Acceleration = g × sin({theta_deg}°) = {a:.2f} m/s². "
+        f"Acceleration = g  x  sin({theta_deg}°) = {a:.2f} m/s^2. "
         f"Driving force = {F_parallel:.2f} N.",
-        [f"a = g sin(θ) = {a:.2f} m/s²", "N = mg cos(θ)", "F = mg sin(θ)"],
+        [f"a = g sin(theta) = {a:.2f} m/s^2", "N = mg cos(theta)", "F = mg sin(theta)"],
         ["Inclined Planes", "Laws of Motion", "Vector Resolution"]
     )
 
@@ -413,27 +416,27 @@ def _numerical_ohms_law(numbers: List[float], q_low: str) -> Tuple[List[DoubtSte
         steps = [
             DoubtStepOut(step=1, title="Given Information",
                 content=f"Voltage (V) = {V} V\n"
-                        f"Resistance (R) = {R} Ω\n"
+                        f"Resistance (R) = {R}  Ohm\n"
                         f"Find: Current (I)"),
             DoubtStepOut(step=2, title="Formula to Use",
-                content="Ohm's Law:  V = I × R\n\nRearranging for current: I = V / R"),
+                content="Ohm's Law:  V = I  x  R\n\nRearranging for current: I = V / R"),
             DoubtStepOut(step=3, title="Substitute",
                 content=f"I = {V} / {R}"),
             DoubtStepOut(step=4, title="Calculate",
                 content=f"I = {I:.3f} A  ({I * 1000:.2f} mA)"),
             DoubtStepOut(step=5, title="Answer",
                 content=f"The current flowing through the circuit is {I:.3f} A.\n"
-                        f"Power dissipated: P = V × I = {V} × {I:.3f} = {V*I:.2f} W")
+                        f"Power dissipated: P = V  x  I = {V}  x  {I:.3f} = {V*I:.2f} W")
         ]
         return (steps, f"Current I = V/R = {V}/{R} = {I:.3f} A.",
-                ["V = I × R", "I = V / R", "P = V × I", f"I = {I:.3f} A"],
+                ["V = I  x  R", "I = V / R", "P = V  x  I", f"I = {I:.3f} A"],
                 ["Current Electricity", "DC Circuits", "Ohm's Law"])
 
     return None
 
 
 # ─────────────────────────────────────────────────────────────
-#  CONCEPTUAL SOLVERS  (Core Idea → Intuition → Equation → Example → Check Yourself)
+#  CONCEPTUAL SOLVERS  (Core Idea -> Intuition -> Equation -> Example -> Check Yourself)
 # ─────────────────────────────────────────────────────────────
 
 def _conceptual_resistance_current() -> Tuple[List[DoubtStepOut], str, List[str], List[str]]:
@@ -447,31 +450,31 @@ def _conceptual_resistance_current() -> Tuple[List[DoubtStepOut], str, List[str]
                     "through. The resistance is like the narrowness of the pipe.\n\n"
                     "A wider pipe (lower resistance) lets more water flow (higher current) "
                     "for the same pressure (same voltage).\n\n"
-                    "A narrower pipe (higher resistance) restricts the flow — just as a "
+                    "A narrower pipe (higher resistance) restricts the flow  --  just as a "
                     "high-resistance component limits current."),
         DoubtStepOut(step=3, title="The Equation",
-            content="Ohm's Law:  V = I × R\n\n"
+            content="Ohm's Law:  V = I  x  R\n\n"
                     "Rearranging: I = V / R\n\n"
-                    "If V is constant and R decreases → I must increase.\n"
-                    "If V is constant and R increases → I must decrease.\n\n"
-                    "For example: V = 12 V, R = 3 Ω → I = 4 A\n"
-                    "             V = 12 V, R = 6 Ω → I = 2 A  (R doubled, I halved)"),
+                    "If V is constant and R decreases -> I must increase.\n"
+                    "If V is constant and R increases -> I must decrease.\n\n"
+                    "For example: V = 12 V, R = 3  Ohm -> I = 4 A\n"
+                    "             V = 12 V, R = 6  Ohm -> I = 2 A  (R doubled, I halved)"),
         DoubtStepOut(step=4, title="Real World Example",
             content="A dimmer switch controls the brightness of a bulb by changing the "
-                    "resistance in the circuit. Higher resistance → less current → dimmer bulb.\n\n"
+                    "resistance in the circuit. Higher resistance -> less current -> dimmer bulb.\n\n"
                     "Short circuits are dangerous because resistance drops to nearly zero, "
                     "so current surges to an extremely high value, which can start fires."),
         DoubtStepOut(step=5, title="Check Your Understanding",
-            content="Try this: A 9V battery is connected to a 3 Ω resistor. What is the current?\n\n"
+            content="Try this: A 9V battery is connected to a 3  Ohm resistor. What is the current?\n\n"
                     "Answer: I = V / R = 9 / 3 = 3 A\n\n"
-                    "Now if the resistance doubles to 6 Ω, current halves to 1.5 A. "
+                    "Now if the resistance doubles to 6  Ohm, current halves to 1.5 A. "
                     "Can you verify this using Ohm's Law?")
     ]
     return (
         steps,
         "When voltage is fixed, current and resistance are inversely proportional (I = V/R). "
         "Lower resistance allows more current to flow.",
-        ["I = V / R", "V = I × R", "R ↑ means I ↓ at constant V"],
+        ["I = V / R", "V = I  x  R", "R  increases  means I  decreases  at constant V"],
         ["Current Electricity", "Ohm's Law", "DC Circuits"]
     )
 
@@ -479,11 +482,11 @@ def _conceptual_resistance_current() -> Tuple[List[DoubtStepOut], str, List[str]
 def _conceptual_why_sky_blue() -> Tuple[List[DoubtStepOut], str, List[str], List[str]]:
     steps = [
         DoubtStepOut(step=1, title="Core Idea",
-            content="The sky appears blue because of a phenomenon called Rayleigh Scattering — "
+            content="The sky appears blue because of a phenomenon called Rayleigh Scattering  --  "
                     "sunlight is scattered by gas molecules in the atmosphere, and blue light "
                     "scatters much more than red light."),
         DoubtStepOut(step=2, title="The Intuition",
-            content="Sunlight is white light — it contains all colours of the rainbow. "
+            content="Sunlight is white light  --  it contains all colours of the rainbow. "
                     "When sunlight enters the atmosphere, it collides with tiny nitrogen and "
                     "oxygen molecules.\n\n"
                     "Shorter wavelengths (violet and blue) scatter in all directions far more "
@@ -499,17 +502,17 @@ def _conceptual_why_sky_blue() -> Tuple[List[DoubtStepOut], str, List[str], List
             content="At sunrise and sunset, sunlight travels through a much thicker layer of "
                     "atmosphere. By the time it reaches you, almost all the blue has scattered "
                     "away in other directions. Only the longer red and orange wavelengths "
-                    "remain — giving that warm glow."),
+                    "remain  --  giving that warm glow."),
         DoubtStepOut(step=5, title="Check Your Understanding",
             content="Quick question: Why does the Moon's sky appear black even during the day?\n\n"
                     "The Moon has no atmosphere. Without gas molecules to scatter sunlight, "
-                    "there is no blue sky — just the darkness of space.")
+                    "there is no blue sky  --  just the darkness of space.")
     ]
     return (
         steps,
         "The sky is blue due to Rayleigh Scattering. Blue light (short wavelength) "
         "scatters about 5 times more than red light when sunlight hits atmospheric molecules.",
-        ["Scattering ∝ 1/λ⁴", "Blue λ ≈ 450 nm", "Red λ ≈ 700 nm"],
+        ["Scattering  proportional to  1/lambda^4", "Blue lambda ≈ 450 nm", "Red lambda ≈ 700 nm"],
         ["Optics", "Wave Nature of Light", "Atmospheric Physics"]
     )
 
@@ -523,41 +526,41 @@ def _conceptual_gravity() -> Tuple[List[DoubtStepOut], str, List[str], List[str]
         DoubtStepOut(step=2, title="The Intuition",
             content="Every object in the universe pulls every other object toward it. "
                     "You attract the Earth, and the Earth attracts you. But because Earth "
-                    "is vastly more massive, it barely accelerates — while you fall at 9.8 m/s².\n\n"
+                    "is vastly more massive, it barely accelerates  --  while you fall at 9.8 m/s^2.\n\n"
                     "This is why planets orbit the Sun, the Moon orbits Earth, and "
                     "objects fall when dropped."),
         DoubtStepOut(step=3, title="Newton's Law of Gravitation",
-            content="F = G × m₁ × m₂ / r²\n\n"
+            content="F = G  x  m_1  x  m_2 / r^2\n\n"
                     "Where:\n"
                     "  F = gravitational force\n"
-                    "  G = Universal gravitational constant = 6.67 × 10^-11 N·m²/kg²\n"
-                    "  m₁ and m₂ = masses of the two objects\n"
+                    "  G = Universal gravitational constant = 6.67  x  10^-11 N·m^2/kg^2\n"
+                    "  m_1 and m_2 = masses of the two objects\n"
                     "  r = distance between their centres\n\n"
                     "The force follows an inverse-square law: double the distance, "
                     "and the force becomes 4 times weaker."),
         DoubtStepOut(step=4, title="Near Earth's Surface",
             content="For objects near Earth's surface, gravity simplifies to:\n\n"
-                    "Weight = mass × g\n"
-                    "W = m × g  (where g = 9.8 m/s²)\n\n"
-                    "So a 60 kg person weighs: W = 60 × 9.8 = 588 N on Earth.\n"
-                    "On the Moon (g = 1.6 m/s²), the same person weighs only 96 N — "
+                    "Weight = mass  x  g\n"
+                    "W = m  x  g  (where g = 9.8 m/s^2)\n\n"
+                    "So a 60 kg person weighs: W = 60  x  9.8 = 588 N on Earth.\n"
+                    "On the Moon (g = 1.6 m/s^2), the same person weighs only 96 N  --  "
                     "that is why astronauts can jump much higher there."),
         DoubtStepOut(step=5, title="Check Your Understanding",
             content="If the distance between two objects doubles, by what factor does gravity change?\n\n"
                     "Answer: Force becomes 1/4 as strong (inverse-square law).\n\n"
-                    "What if mass doubles? Force doubles — gravity is directly proportional to mass.")
+                    "What if mass doubles? Force doubles  --  gravity is directly proportional to mass.")
     ]
     return (
         steps,
         "Gravity is an attractive force between masses. "
-        "Newton's Law: F = G × m₁ × m₂ / r². Near Earth's surface, F = mg (g = 9.8 m/s²).",
-        ["F = G m₁m₂ / r²", "W = mg", "g = 9.8 m/s²", "G = 6.67 × 10⁻¹¹ N·m²/kg²"],
+        "Newton's Law: F = G  x  m_1  x  m_2 / r^2. Near Earth's surface, F = mg (g = 9.8 m/s^2).",
+        ["F = G m_1m_2 / r^2", "W = mg", "g = 9.8 m/s^2", "G = 6.67  x  10^-^1^1 N·m^2/kg^2"],
         ["Gravitation", "Newton's Law of Gravitation", "Mechanics"]
     )
 
 
 # ─────────────────────────────────────────────────────────────
-#  TEACH ME SOLVERS  (Concept map — ordered learning path)
+#  TEACH ME SOLVERS  (Concept map  --  ordered learning path)
 # ─────────────────────────────────────────────────────────────
 
 def _teach_electrostatics() -> Tuple[List[DoubtStepOut], str, List[str], List[str]]:
@@ -565,39 +568,39 @@ def _teach_electrostatics() -> Tuple[List[DoubtStepOut], str, List[str], List[st
         DoubtStepOut(step=1, title="Start Here: Electric Charge",
             content="Everything begins with charge. Protons carry positive charge, "
                     "electrons carry negative charge. Like charges repel, opposite charges attract.\n\n"
-                    "Key fact: Charge is conserved — it cannot be created or destroyed, "
+                    "Key fact: Charge is conserved  --  it cannot be created or destroyed, "
                     "only transferred.\n\n"
-                    "SI unit of charge: Coulomb (C). Elementary charge: e = 1.6 × 10^-19 C"),
+                    "SI unit of charge: Coulomb (C). Elementary charge: e = 1.6  x  10^-19 C"),
         DoubtStepOut(step=2, title="Step 2: Coulomb's Law",
             content="The force between two point charges is:\n\n"
-                    "F = k × q₁ × q₂ / r²\n\n"
-                    "Where k = 9 × 10^9 N·m²/C² is Coulomb's constant.\n\n"
-                    "Same form as gravity — but much stronger, and can be repulsive as well as attractive."),
+                    "F = k  x  q_1  x  q_2 / r^2\n\n"
+                    "Where k = 9  x  10^9 N·m^2/C^2 is Coulomb's constant.\n\n"
+                    "Same form as gravity  --  but much stronger, and can be repulsive as well as attractive."),
         DoubtStepOut(step=3, title="Step 3: Electric Field",
             content="Instead of asking 'what force does charge A exert on B?', we ask:\n"
                     "'What field does charge A create at a point in space?'\n\n"
                     "Electric Field E = F / q  (force per unit positive charge)\n"
-                    "Field due to a point charge: E = k × Q / r²\n\n"
+                    "Field due to a point charge: E = k  x  Q / r^2\n\n"
                     "Direction: away from positive charges, toward negative charges."),
         DoubtStepOut(step=4, title="Step 4: Electric Potential",
             content="Electric potential V is the work done per unit charge to bring a "
                     "positive charge from infinity to a point.\n\n"
-                    "V = k × Q / r\n\n"
+                    "V = k  x  Q / r\n\n"
                     "Potential difference (voltage): ΔV = W / q\n"
                     "Relationship to field: E = -dV/dr (field is the slope of potential)"),
         DoubtStepOut(step=5, title="Step 5: Capacitors",
             content="A capacitor stores charge between two conducting plates.\n\n"
                     "Capacitance: C = Q / V (how much charge per volt)\n"
                     "SI unit: Farad (F)\n\n"
-                    "Parallel plate capacitor: C = ε₀ × A / d\n"
-                    "(where A = plate area, d = separation, ε₀ = 8.85 × 10^-12 F/m)\n\n"
-                    "Energy stored in a capacitor: E = ½ × C × V²")
+                    "Parallel plate capacitor: C = eps_0  x  A / d\n"
+                    "(where A = plate area, d = separation, eps_0 = 8.85  x  10^-12 F/m)\n\n"
+                    "Energy stored in a capacitor: E = 1/2  x  C  x  V^2")
     ]
     return (
         steps,
-        "Electrostatics covers: Charge → Coulomb's Law → Electric Field → Electric Potential → Capacitors. "
+        "Electrostatics covers: Charge -> Coulomb's Law -> Electric Field -> Electric Potential -> Capacitors. "
         "Master these 5 steps in order.",
-        ["F = kq₁q₂/r²", "E = kQ/r²", "V = kQ/r", "C = Q/V", "E_stored = ½CV²"],
+        ["F = kq_1q_2/r^2", "E = kQ/r^2", "V = kQ/r", "C = Q/V", "E_stored = 1/2CV^2"],
         ["Electrostatics", "Electric Field", "Capacitors", "JEE Physics"]
     )
 
@@ -605,44 +608,44 @@ def _teach_electrostatics() -> Tuple[List[DoubtStepOut], str, List[str], List[st
 def _teach_quadratic_equations() -> Tuple[List[DoubtStepOut], str, List[str], List[str]]:
     steps = [
         DoubtStepOut(step=1, title="Start Here: What is a Quadratic?",
-            content="A quadratic equation has the form: ax² + bx + c = 0\n\n"
-                    "where a, b, c are real numbers and a ≠ 0.\n\n"
-                    "The graph of a quadratic is a parabola — it opens upward if a > 0, "
+            content="A quadratic equation has the form: ax^2 + bx + c = 0\n\n"
+                    "where a, b, c are real numbers and a != 0.\n\n"
+                    "The graph of a quadratic is a parabola  --  it opens upward if a > 0, "
                     "downward if a < 0.\n\n"
-                    "Examples: x² - 5x + 6 = 0,  2x² + 3x - 2 = 0"),
+                    "Examples: x^2 - 5x + 6 = 0,  2x^2 + 3x - 2 = 0"),
         DoubtStepOut(step=2, title="Step 2: Finding the Roots",
-            content="The solutions (roots) are the values of x where the equation equals zero — "
+            content="The solutions (roots) are the values of x where the equation equals zero  --  "
                     "where the parabola crosses the x-axis.\n\n"
                     "Three methods:\n"
-                    "1. Factorisation: rewrite as (x - r₁)(x - r₂) = 0\n"
+                    "1. Factorisation: rewrite as (x - r_1)(x - r_2) = 0\n"
                     "2. Completing the square\n"
-                    "3. Quadratic Formula: x = (-b ± √(b² - 4ac)) / 2a"),
+                    "3. Quadratic Formula: x = (-b +/- sqrt(b^2 - 4ac)) / 2a"),
         DoubtStepOut(step=3, title="Step 3: The Discriminant",
-            content="The discriminant D = b² - 4ac tells you the nature of the roots "
+            content="The discriminant D = b^2 - 4ac tells you the nature of the roots "
                     "BEFORE you solve:\n\n"
-                    "D > 0  →  Two distinct real roots (parabola crosses x-axis twice)\n"
-                    "D = 0  →  One repeated real root (parabola just touches the x-axis)\n"
-                    "D < 0  →  No real roots, two complex roots (parabola never touches x-axis)"),
+                    "D > 0  ->  Two distinct real roots (parabola crosses x-axis twice)\n"
+                    "D = 0  ->  One repeated real root (parabola just touches the x-axis)\n"
+                    "D < 0  ->  No real roots, two complex roots (parabola never touches x-axis)"),
         DoubtStepOut(step=4, title="Step 4: Sum and Product of Roots",
-            content="If the roots are α and β, then:\n\n"
-                    "Sum of roots:     α + β = -b / a\n"
-                    "Product of roots: α × β = c / a\n\n"
-                    "These shortcuts are extremely useful in JEE problems — "
-                    "you often do not need to find α and β individually."),
+            content="If the roots are alpha and beta, then:\n\n"
+                    "Sum of roots:     alpha + beta = -b / a\n"
+                    "Product of roots: alpha  x  beta = c / a\n\n"
+                    "These shortcuts are extremely useful in JEE problems  --  "
+                    "you often do not need to find alpha and beta individually."),
         DoubtStepOut(step=5, title="Step 5: Worked Example",
-            content="Solve: x² - 5x + 6 = 0  (a=1, b=-5, c=6)\n\n"
-                    "Discriminant: D = (-5)² - 4(1)(6) = 25 - 24 = 1 > 0  →  two real roots\n\n"
+            content="Solve: x^2 - 5x + 6 = 0  (a=1, b=-5, c=6)\n\n"
+                    "Discriminant: D = (-5)^2 - 4(1)(6) = 25 - 24 = 1 > 0  ->  two real roots\n\n"
                     "Using quadratic formula:\n"
-                    "x = (5 ± √1) / 2\n"
+                    "x = (5 +/- sqrt1) / 2\n"
                     "x = (5 + 1)/2 = 3   or   x = (5 - 1)/2 = 2\n\n"
-                    "Verify: Sum = 3 + 2 = 5 = -(-5)/1  ✓\n"
-                    "        Product = 3 × 2 = 6 = 6/1  ✓")
+                    "Verify: Sum = 3 + 2 = 5 = -(-5)/1   [Verified] \n"
+                    "        Product = 3  x  2 = 6 = 6/1   [Verified] ")
     ]
     return (
         steps,
-        "Quadratic equations: ax² + bx + c = 0. Roots found by factorisation or formula "
-        "x = (-b ± √(b²-4ac)) / 2a. Discriminant D = b²-4ac determines the nature of roots.",
-        ["x = (-b ± √D) / 2a", "D = b² - 4ac", "α + β = -b/a", "αβ = c/a"],
+        "Quadratic equations: ax^2 + bx + c = 0. Roots found by factorisation or formula "
+        "x = (-b +/- sqrt(b^2-4ac)) / 2a. Discriminant D = b^2-4ac determines the nature of roots.",
+        ["x = (-b +/- sqrtD) / 2a", "D = b^2 - 4ac", "alpha + beta = -b/a", "alphabeta = c/a"],
         ["Algebra", "Quadratic Equations", "JEE Mathematics"]
     )
 
@@ -680,7 +683,7 @@ def _apply_follow_up(
                     "- Notice how car brakes work (friction, force, deceleration)\n"
                     "- See a phone charger converting voltage and current (Ohm's Law)\n"
                     "- Watch a ball thrown upward then fall back (kinematics)\n\n"
-                    "Try to connect the formula to something real you can visualise — "
+                    "Try to connect the formula to something real you can visualise  --  "
                     "that is what top JEE scorers do."
         )
         return original_steps + [example_step], final_answer
@@ -705,7 +708,7 @@ def _apply_follow_up(
             step=len(original_steps) + 1,
             title="Test Yourself",
             content=f"Based on what you just learned about {subject.lower()}, try this question:\n\n"
-                    f"Apply the same concept to: a slightly different version of the problem — "
+                    f"Apply the same concept to: a slightly different version of the problem  --  "
                     f"change one value and recalculate.\n\n"
                     f"Hint: The method is exactly the same. Just substitute the new values "
                     f"into the same formula.\n\n"
@@ -714,6 +717,139 @@ def _apply_follow_up(
         return original_steps + [quiz_step], final_answer
 
     return original_steps, final_answer
+
+
+# ─────────────────────────────────────────────────────────────
+#  LIVE AI ENGINE (Cerebras -> Groq Fallback)
+# ─────────────────────────────────────────────────────────────
+
+def _call_llm_for_doubt(
+    question: str,
+    subject: str,
+    question_type: str,
+    follow_up: Optional[str] = None
+) -> Optional[Tuple[List[DoubtStepOut], str, List[str], List[str]]]:
+    """
+    Calls Cerebras API first, with automatic fallback to Groq API.
+    Returns parsed (steps, final_answer, key_concepts, related_topics) or None if both fail.
+    """
+    system_prompt = (
+        "You are an expert pedagogical AI tutor for students preparing for high school and competitive exams (CBSE, JEE, NEET). "
+        "Explain concepts clearly, accurately, and step by step. "
+        "CRITICAL FORMAT RULES:\n"
+        "1. Write 100% in plain English. NEVER use LaTeX syntax (e.g. no $, no \\frac, no \\text, no \\vec).\n"
+        "2. Write math equations simply, like 'F = m * a', 'c = 3.00 x 10^8 m/s', 'v = u + a * t'.\n"
+        "3. Output ONLY a valid JSON object with these exact keys:\n"
+        "   - 'final_answer': string (the direct, definitive, human-readable answer)\n"
+        "   - 'steps': array of objects, each having 'step' (integer), 'title' (string), 'content' (string in plain English)\n"
+        "   - 'key_concepts': array of strings (formulas/constants to remember)\n"
+        "   - 'related_topics': array of strings\n"
+    )
+
+    user_prompt = f"Subject: {subject}\nQuestion: {question}"
+    if follow_up:
+        user_prompt += f"\nFollow-up request: {follow_up}"
+
+    # 1. Try Cerebras
+    cerebras_keys = [k.strip() for k in (settings.CEREBRAS_API_KEYS or settings.CEREBRAS_API_KEY).split(",") if k.strip()]
+    for key in cerebras_keys:
+        try:
+            r = httpx.post(
+                "https://api.cerebras.ai/v1/chat/completions",
+                headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                json={
+                    "model": settings.CEREBRAS_MODEL,
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    "temperature": 0.3,
+                    "max_tokens": 2048,
+                },
+                timeout=12
+            )
+            if r.status_code == 200:
+                content = r.json()["choices"][0]["message"]["content"]
+                parsed = _parse_llm_json(content)
+                if parsed:
+                    return parsed
+        except Exception:
+            pass
+
+    # 2. Try Groq (Fallback)
+    groq_keys = [k.strip() for k in (settings.GROQ_API_KEYS or settings.GROQ_API_KEY).split(",") if k.strip()]
+    for key in groq_keys:
+        try:
+            r = httpx.post(
+                "https://api.groq.com/openai/v1/chat/completions",
+                headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                json={
+                    "model": settings.GROQ_MODEL,
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    "temperature": 0.3,
+                    "max_tokens": 2048,
+                    "response_format": {"type": "json_object"}
+                },
+                timeout=12
+            )
+            if r.status_code == 200:
+                content = r.json()["choices"][0]["message"]["content"]
+                parsed = _parse_llm_json(content)
+                if parsed:
+                    return parsed
+        except Exception:
+            pass
+
+    return None
+
+
+def _clean_text(s: str) -> str:
+    if not s:
+        return ""
+    # Strip markdown bold/italics
+    s = s.replace("**", "").replace("*", "").replace("`", "")
+    # Normalize unicode math symbols
+    repl = {
+        "π": "pi", "θ": "theta", "λ": "lambda", "α": "alpha", "β": "beta",
+        "×": " x ", "²": "^2", "³": "^3", "⁴": "^4", "⁻": "^-", "₀": "_0",
+        "₁": "_1", "₂": "_2", "ε": "epsilon", "μ": "mu", "Ω": " Ohm",
+        "√": "sqrt", "½": "1/2", "—": " -- ", "–": " - ", "→": " -> ",
+        "↑": " increases ", "↓": " decreases ", "±": "+/-", "≠": "!="
+    }
+    for k, v in repl.items():
+        s = s.replace(k, v)
+    return s.strip()
+
+
+def _parse_llm_json(content: str) -> Optional[Tuple[List[DoubtStepOut], str, List[str], List[str]]]:
+    try:
+        start = content.find("{")
+        end = content.rfind("}") + 1
+        if start == -1 or end <= 0:
+            return None
+        data = json.loads(content[start:end])
+        raw_steps = data.get("steps", [])
+        steps = []
+        for i, s in enumerate(raw_steps, start=1):
+            if isinstance(s, dict):
+                steps.append(
+                    DoubtStepOut(
+                        step=s.get("step", i),
+                        title=_clean_text(str(s.get("title", f"Step {i}"))),
+                        content=_clean_text(str(s.get("content", "")))
+                    )
+                )
+        final_ans = _clean_text(str(data.get("final_answer", "")))
+        key_concepts = [_clean_text(str(k)) for k in data.get("key_concepts", []) if str(k).strip()]
+        related_topics = [_clean_text(str(t)) for t in data.get("related_topics", []) if str(t).strip()]
+        if steps and final_ans:
+            return steps, final_ans, key_concepts, related_topics
+    except Exception:
+        pass
+    return None
 
 
 # ─────────────────────────────────────────────────────────────
@@ -728,13 +864,19 @@ def solve_doubt_intelligently(
     """
     Returns:
         (steps, final_answer, key_concepts, related_topics, question_type, confidence, confidence_label)
-    All text is plain human-readable English — no LaTeX, no markdown symbols.
+    All text is plain human-readable English  --  no LaTeX, no markdown symbols.
     """
     q_low = question_text.lower().strip()
     numbers = extract_numbers(question_text)
     subject = detect_subject(question_text, subject_hint)
     question_type = classify_question_type(question_text)
     confidence, confidence_label = classify_confidence(question_type)
+
+    # 1. Try Live AI Engine (Cerebras -> Groq Fallback)
+    llm_result = _call_llm_for_doubt(question_text, subject, question_type, follow_up_action)
+    if llm_result:
+        steps, final_answer, key_concepts, related_topics = llm_result
+        return steps, final_answer, key_concepts, related_topics, question_type, "high", "AI Tutor Verified"
 
     result = None
 
@@ -795,7 +937,7 @@ def solve_doubt_intelligently(
 
 
 # ─────────────────────────────────────────────────────────────
-#  GENERIC FALLBACK — Always returns a coherent answer
+#  GENERIC FALLBACK  --  Always returns a coherent answer
 # ─────────────────────────────────────────────────────────────
 
 def _generic_fallback(
@@ -845,15 +987,15 @@ def _generic_fallback(
                         "the one that uses the information you have been given."),
             DoubtStepOut(step=3, title="Substitute and Solve",
                 content="Replace each symbol in the formula with the given numbers. "
-                        "Keep track of units at every step — cancel units to verify your answer "
+                        "Keep track of units at every step  --  cancel units to verify your answer "
                         "has the correct units."),
             DoubtStepOut(step=4, title="Calculate",
                 content="Perform the arithmetic carefully. "
-                        "Use standard values: g = 9.8 m/s², speed of light = 3 × 10^8 m/s, etc."),
+                        "Use standard values: g = 9.8 m/s^2, speed of light = 3  x  10^8 m/s, etc."),
             DoubtStepOut(step=5, title="Answer and Verify",
                 content="State your final answer with the correct unit. "
                         "Sanity-check: does the magnitude feel reasonable? "
-                        "For example, a speed above 3 × 10^8 m/s is impossible.")
+                        "For example, a speed above 3  x  10^8 m/s is impossible.")
         ]
         return (steps,
                 f"A step-by-step numerical solution for this {subject} problem.",
@@ -900,8 +1042,8 @@ def _generic_fallback(
                         "3. How to apply them in standard problem types\n"
                         "4. Common exam tricks and shortcuts"),
             DoubtStepOut(step=3, title="Recommended Study Order",
-                content="Start with definitions → understand the formula → "
-                        "solve basic examples → tackle harder problems.\n\n"
+                content="Start with definitions -> understand the formula -> "
+                        "solve basic examples -> tackle harder problems.\n\n"
                         "Do not memorise without understanding. The formula comes naturally "
                         "once you understand what each symbol means physically."),
             DoubtStepOut(step=4, title="Practice Strategy",
@@ -916,6 +1058,6 @@ def _generic_fallback(
                         "Use the AI Tutor to ask follow-up questions until it clicks.")
         ]
         return (steps,
-                f"Learning roadmap for {subject}: definitions → equations → examples → practice.",
+                f"Learning roadmap for {subject}: definitions -> equations -> examples -> practice.",
                 [f"{subject} fundamentals", "Step-by-step learning"],
                 [subject, "Study Strategy"])

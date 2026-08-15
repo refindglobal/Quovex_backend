@@ -72,7 +72,95 @@ def _pick_api_key() -> str:
     return random.choice(keys) if keys else ""
 
 
-@celery_app.task(name="app.tasks.question_generation.generate_quiz_questions")
+def _pick_groq_key() -> str:
+    keys_str = settings.GROQ_API_KEYS or settings.GROQ_API_KEY
+    if not keys_str:
+        return ""
+    keys = [k.strip() for k in keys_str.split(",") if k.strip()]
+    return random.choice(keys) if keys else ""
+
+
+def _call_cerebras(api_key: str, subject: str, exam_tag: str, difficulty: str, count: int) -> List[dict]:
+    """Call Cerebras API for question generation with Groq fallback on failure."""
+    is_school_grade = exam_tag.startswith("Class ")
+    context_note = (
+        f"These questions are for {exam_tag} school students (age ~{_grade_to_age(exam_tag)}). "
+        f"Keep language simple and age-appropriate."
+        if is_school_grade
+        else f"These questions are for {exam_tag} competitive exam preparation."
+    )
+    prompt = GENERATION_PROMPT.format(
+        count=count, subject=subject, exam_tag=exam_tag, difficulty=difficulty, context_note=context_note
+    )
+
+    last_exc = None
+    # 1. Try Cerebras
+    for attempt in range(2):
+        if not api_key:
+            break
+        try:
+            response = httpx.post(
+                "https://api.cerebras.ai/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": settings.CEREBRAS_MODEL,
+                    "messages": [
+                        {"role": "system", "content": "You are an expert exam question writer. Return only valid JSON."},
+                        {"role": "user", "content": prompt},
+                    ],
+                    "temperature": 0.7,
+                    "max_tokens": 4096,
+                },
+                timeout=30,
+            )
+            response.raise_for_status()
+            content = response.json()["choices"][0]["message"]["content"]
+            start = content.find("[")
+            end = content.rfind("]") + 1
+            if start != -1 and end > 0:
+                return json.loads(content[start:end])
+        except Exception as e:
+            last_exc = e
+            api_key = _pick_api_key()
+            time.sleep(0.5)
+
+    # 2. Fallback to Groq API
+    groq_key = _pick_groq_key()
+    if groq_key:
+        try:
+            logger.info("Falling back to Groq for question generation")
+            response = httpx.post(
+                "https://api.groq.com/openai/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {groq_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": settings.GROQ_MODEL,
+                    "messages": [
+                        {"role": "system", "content": "You are an expert exam question writer. Return only valid JSON array."},
+                        {"role": "user", "content": prompt},
+                    ],
+                    "temperature": 0.7,
+                    "max_tokens": 4096,
+                },
+                timeout=30,
+            )
+            response.raise_for_status()
+            content = response.json()["choices"][0]["message"]["content"]
+            start = content.find("[")
+            end = content.rfind("]") + 1
+            if start != -1 and end > 0:
+                return json.loads(content[start:end])
+        except Exception as e:
+            last_exc = e
+
+    if last_exc:
+        raise last_exc
+    raise ValueError("No AI API keys configured or available")
 def generate_quiz_questions(subject: str = None, exam_tag: str = None, grade_or_tag: str = None, count_per_combo: int = 20):
     """Generate quiz questions via Cerebras API and store in DB as live."""
     api_key = _pick_api_key()
@@ -140,50 +228,3 @@ def generate_quiz_questions(subject: str = None, exam_tag: str = None, grade_or_
 
     return f"Generated {total_generated} questions total"
 
-
-def _call_cerebras(api_key: str, subject: str, exam_tag: str, difficulty: str, count: int) -> List[dict]:
-    """Call Cerebras API for question generation with key rotation on retry."""
-    is_school_grade = exam_tag.startswith("Class ")
-    context_note = (
-        f"These questions are for {exam_tag} school students (age ~{_grade_to_age(exam_tag)}). "
-        f"Keep language simple and age-appropriate."
-        if is_school_grade
-        else f"These questions are for {exam_tag} competitive exam preparation."
-    )
-    prompt = GENERATION_PROMPT.format(
-        count=count, subject=subject, exam_tag=exam_tag, difficulty=difficulty, context_note=context_note
-    )
-
-    last_exc = None
-    for attempt in range(3):
-        try:
-            response = httpx.post(
-                "https://api.cerebras.ai/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": settings.CEREBRAS_MODEL,
-                    "messages": [
-                        {"role": "system", "content": "You are an expert exam question writer. Return only valid JSON."},
-                        {"role": "user", "content": prompt},
-                    ],
-                    "temperature": 0.7,
-                    "max_tokens": 4096,
-                },
-                timeout=60,
-            )
-            response.raise_for_status()
-            content = response.json()["choices"][0]["message"]["content"]
-            start = content.find("[")
-            end = content.rfind("]") + 1
-            if start == -1 or end == 0:
-                raise ValueError("No JSON array found in response")
-            return json.loads(content[start:end])
-        except Exception as e:
-            last_exc = e
-            if attempt < 2:
-                api_key = _pick_api_key()
-                time.sleep(1 + attempt)
-    raise last_exc

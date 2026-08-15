@@ -47,11 +47,6 @@ celery_app.conf.beat_schedule = {
         "task": "app.tasks.streak_risk_scan.check_streak_risks",
         "schedule": crontab(minute=0, hour=20),
     },
-    # Quiz question generation: weekly on Sunday midnight
-    "quiz-question-generation": {
-        "task": "app.tasks.question_generation.generate_quiz_questions",
-        "schedule": crontab(minute=0, hour=0, day_of_week=0),
-    },
     # ── April 1 auto-advance: school/college class year ──
     # Runs at 00:05 UTC on April 1st every year (after Indian academic year ends)
     "class-auto-advance": {
@@ -62,16 +57,6 @@ celery_app.conf.beat_schedule = {
     "kyc-reminder-scan": {
         "task": "app.tasks.kyc_reminder_scan.kyc_reminder_scan",
         "schedule": crontab(minute=0, hour=12),
-    },
-    # Daily AI reports: runs at 23:00 UTC (active users today)
-    "daily-ai-reports": {
-        "task": "app.tasks.report_generation.generate_daily_reports",
-        "schedule": crontab(minute=0, hour=23),
-    },
-    # Weekly AI reports: runs at 23:30 UTC on Sunday
-    "weekly-ai-reports": {
-        "task": "app.tasks.report_generation.generate_weekly_reports",
-        "schedule": crontab(minute=30, hour=23, day_of_week=0),
     },
 }
 

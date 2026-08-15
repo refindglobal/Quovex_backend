@@ -49,6 +49,42 @@ async def start_quiz(
         body.difficulty, body.question_count, grade_or_tag,
     )
     if not questions:
+        # On-demand fresh question generation via Cerebras / Groq
+        try:
+            from app.tasks.question_generation import _call_cerebras, _pick_api_key
+            from app.models import QuestionType, Difficulty
+            api_key = _pick_api_key()
+            tag = body.exam_tag or grade_or_tag or "General"
+            subj = body.subject or "General"
+            diff_str = str(body.difficulty).lower()
+            diff_val = diff_str if diff_str in ("easy", "medium", "hard") else "medium"
+            count = body.question_count or 5
+            raw_qs = _call_cerebras(api_key, subj, tag, diff_val, count)
+            for q_data in raw_qs:
+                if q_data.get("text") and q_data.get("correct_answer"):
+                    q_obj = QuizQuestion(
+                        text=q_data.get("text", ""),
+                        options=q_data.get("options", []),
+                        correct_answer=q_data.get("correct_answer", ""),
+                        explanation=q_data.get("explanation"),
+                        question_type=QuestionType.mcq,
+                        subject=subj,
+                        exam_tag=body.exam_tag,
+                        grade_or_tag=grade_or_tag,
+                        difficulty=Difficulty[diff_val],
+                        status=QuestionStatus.live,
+                        generated_at=datetime.now(timezone.utc),
+                    )
+                    db.add(q_obj)
+            db.commit()
+            questions = select_questions(
+                db, current_user, body.subject, body.exam_tag,
+                body.difficulty, body.question_count, grade_or_tag,
+            )
+        except Exception as e:
+            logger.warning(f"On-demand fresh question generation: {e}")
+
+    if not questions:
         raise HTTPException(status_code=404, detail="No questions available for selected criteria")
 
     quiz_session = QuizSession(
