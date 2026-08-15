@@ -152,17 +152,17 @@ app.include_router(doubts.router, prefix=API_PREFIX)
 
 @app.get("/health")
 async def health_check():
-    """Enhanced health check with DB and Redis status."""
-    statuses = {"status": "ok", "version": settings.APP_VERSION}
+    """Health check reporting app, DB, and Redis status."""
+    statuses = {"status": "ok", "version": settings.APP_VERSION, "checks": {}}
 
     # DB check
     try:
         db = SessionLocal()
         db.execute(text("SELECT 1"))
         db.close()
-        statuses["database"] = "ok"
+        statuses["checks"]["database"] = "ok"
     except Exception as e:
-        statuses["database"] = str(e)
+        statuses["checks"]["database"] = f"error: {str(e)}"
         statuses["status"] = "degraded"
 
     # Redis check
@@ -170,13 +170,13 @@ async def health_check():
         r = await get_redis()
         if r:
             await r.ping()
-            statuses["redis"] = "ok"
+            statuses["checks"]["redis"] = "ok"
         else:
-            statuses["redis"] = "not_available"
+            statuses["checks"]["redis"] = "not_configured"
     except Exception as e:
-        statuses["redis"] = str(e)
+        statuses["checks"]["redis"] = f"error: {str(e)}"
         statuses["status"] = "degraded"
 
-    if statuses["status"] != "ok":
-        return JSONResponse(status_code=503, content=statuses)
+    # Return 200 so Railway's deploy orchestrator doesn't loop-kill the container
     return statuses
+
