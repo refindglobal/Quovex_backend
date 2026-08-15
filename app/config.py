@@ -1,5 +1,9 @@
 from pydantic_settings import BaseSettings
 from typing import List, Optional
+import logging
+import warnings
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_SECRET = "change-me-in-production"
 
@@ -66,10 +70,20 @@ class Settings(BaseSettings):
         extra = "ignore"
 
     def model_post_init(self, __context):
-        if self.ENVIRONMENT == "production" and self.SECRET_KEY == DEFAULT_SECRET:
-            raise ValueError(
-                "SECRET_KEY is still set to the default! Set a strong random secret "
-                "in the .env file before running in production."
+        # ── Fix Railway's postgres:// → postgresql:// (SQLAlchemy 2.x) ────────
+        if self.DATABASE_URL.startswith("postgres://"):
+            object.__setattr__(
+                self, "DATABASE_URL",
+                "postgresql://" + self.DATABASE_URL[len("postgres://"):]
             )
+
+        # ── Warn (don't crash) if SECRET_KEY is still the default ─────────────
+        if self.ENVIRONMENT == "production" and self.SECRET_KEY == DEFAULT_SECRET:
+            warnings.warn(
+                "CRITICAL: SECRET_KEY is still the default value! "
+                "Set a strong random SECRET_KEY in Railway environment variables.",
+                stacklevel=2,
+            )
+
 
 settings = Settings()

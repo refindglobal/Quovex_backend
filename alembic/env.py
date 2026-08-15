@@ -14,8 +14,15 @@ if config.config_file_name is not None:
 target_metadata = Base.metadata
 
 
+def _fix_db_url(url: str) -> str:
+    """Railway provides postgres:// but SQLAlchemy 2.x needs postgresql://"""
+    if url and url.startswith("postgres://"):
+        return "postgresql://" + url[len("postgres://"):]
+    return url
+
+
 def run_migrations_offline() -> None:
-    url = config.get_main_option("sqlalchemy.url")
+    url = _fix_db_url(config.get_main_option("sqlalchemy.url"))
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -27,7 +34,7 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
-    db_url = os.environ.get("DATABASE_URL")
+    db_url = _fix_db_url(os.environ.get("DATABASE_URL"))
     if db_url:
         connectable = create_engine(db_url, poolclass=pool.NullPool)
     else:
