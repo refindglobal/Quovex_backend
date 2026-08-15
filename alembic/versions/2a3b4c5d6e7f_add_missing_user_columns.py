@@ -15,18 +15,31 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
+def _add_column_if_not_exists(table: str, column: sa.Column) -> None:
+    """Add a column only if it doesn't already exist (idempotent helper)."""
+    try:
+        op.add_column(table, column)
+    except Exception as e:
+        # Ignore "duplicate column" errors on SQLite and PostgreSQL
+        msg = str(e).lower()
+        if "duplicate column" in msg or "already exists" in msg:
+            pass
+        else:
+            raise
+
+
 def upgrade() -> None:
-    op.add_column('users', sa.Column('password_hash', sa.Text(), nullable=True))
-    op.add_column('users', sa.Column('referral_code', sa.String(20), nullable=True, unique=True, index=True))
-    op.add_column('users', sa.Column('referred_by_id', sa.Uuid(), sa.ForeignKey('users.id'), nullable=True))
-    op.add_column('users', sa.Column('referral_bonus_earned', sa.Integer(), server_default='0', nullable=False))
-    op.add_column('users', sa.Column('first_session_completed', sa.Boolean(), server_default='0', nullable=False))
-    op.add_column('users', sa.Column('app_lock_enabled', sa.Boolean(), server_default='0', nullable=False))
-    op.add_column('users', sa.Column('app_lock_credits', sa.Integer(), server_default='0', nullable=False))
-    op.add_column('users', sa.Column('locked_app_packages', sa.JSON(), nullable=True))
-    op.add_column('users', sa.Column('last_ad_unlock_at', sa.DateTime(timezone=True), nullable=True))
-    op.add_column('users', sa.Column('ad_unlock_count_today', sa.Integer(), server_default='0', nullable=False))
-    op.add_column('users', sa.Column('ad_unlock_reset_at', sa.DateTime(timezone=True), nullable=True))
+    _add_column_if_not_exists('users', sa.Column('password_hash', sa.Text(), nullable=True))
+    _add_column_if_not_exists('users', sa.Column('referral_code', sa.String(20), nullable=True))
+    _add_column_if_not_exists('users', sa.Column('referred_by_id', sa.Uuid(), nullable=True))
+    _add_column_if_not_exists('users', sa.Column('referral_bonus_earned', sa.Integer(), server_default='0', nullable=False))
+    _add_column_if_not_exists('users', sa.Column('first_session_completed', sa.Boolean(), server_default='0', nullable=False))
+    _add_column_if_not_exists('users', sa.Column('app_lock_enabled', sa.Boolean(), server_default='0', nullable=False))
+    _add_column_if_not_exists('users', sa.Column('app_lock_credits', sa.Integer(), server_default='0', nullable=False))
+    _add_column_if_not_exists('users', sa.Column('locked_app_packages', sa.JSON(), nullable=True))
+    _add_column_if_not_exists('users', sa.Column('last_ad_unlock_at', sa.DateTime(timezone=True), nullable=True))
+    _add_column_if_not_exists('users', sa.Column('ad_unlock_count_today', sa.Integer(), server_default='0', nullable=False))
+    _add_column_if_not_exists('users', sa.Column('ad_unlock_reset_at', sa.DateTime(timezone=True), nullable=True))
 
 
 def downgrade() -> None:

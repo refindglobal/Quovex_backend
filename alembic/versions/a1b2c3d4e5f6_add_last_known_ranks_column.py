@@ -15,8 +15,19 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
+
+def _add_column_if_not_exists(table, column):
+    try:
+        _add_column_if_not_exists(table, column)
+    except Exception as e:
+        if 'duplicate column' in str(e).lower() or 'already exists' in str(e).lower():
+            pass
+        else:
+            raise
+
+
 def upgrade() -> None:
-    op.add_column('users', sa.Column('last_known_ranks', sa.JSON(), nullable=True))
+    _add_column_if_not_exists('users', sa.Column('last_known_ranks', sa.JSON(), nullable=True))
 
 
 def downgrade() -> None:

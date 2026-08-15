@@ -13,6 +13,17 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
+
+def _add_column_if_not_exists(table, column):
+    try:
+        _add_column_if_not_exists(table, column)
+    except Exception as e:
+        if 'duplicate column' in str(e).lower() or 'already exists' in str(e).lower():
+            pass
+        else:
+            raise
+
+
 def upgrade() -> None:
     op.create_table('reward_configs',
         sa.Column('id', sa.Uuid(), nullable=False),
@@ -29,8 +40,8 @@ def upgrade() -> None:
         sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         sa.PrimaryKeyConstraint('id'),
     )
-    op.add_column('rewards', sa.Column('custom_reward_name', sa.String(length=200), nullable=True))
-    op.add_column('rewards', sa.Column('reward_image_url', sa.Text(), nullable=True))
+    _add_column_if_not_exists('rewards', sa.Column('custom_reward_name', sa.String(length=200), nullable=True))
+    _add_column_if_not_exists('rewards', sa.Column('reward_image_url', sa.Text(), nullable=True))
 
 
 

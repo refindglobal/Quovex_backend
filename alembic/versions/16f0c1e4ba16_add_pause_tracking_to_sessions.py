@@ -15,10 +15,20 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
+def _add_column_if_not_exists(table: str, column: sa.Column) -> None:
+    try:
+        op.add_column(table, column)
+    except Exception as e:
+        if "duplicate column" in str(e).lower() or "already exists" in str(e).lower():
+            pass
+        else:
+            raise
+
+
 def upgrade() -> None:
-    op.add_column('sessions', sa.Column('is_paused', sa.Boolean(), nullable=False))
-    op.add_column('sessions', sa.Column('paused_at', sa.DateTime(timezone=True), nullable=True))
-    op.add_column('sessions', sa.Column('total_paused_seconds', sa.Integer(), nullable=False))
+    _add_column_if_not_exists('sessions', sa.Column('is_paused', sa.Boolean(), nullable=False))
+    _add_column_if_not_exists('sessions', sa.Column('paused_at', sa.DateTime(timezone=True), nullable=True))
+    _add_column_if_not_exists('sessions', sa.Column('total_paused_seconds', sa.Integer(), nullable=False))
 
 
 def downgrade() -> None:

@@ -28,9 +28,18 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
     )
 
+def _add_column_if_not_exists(table: str, column: sa.Column) -> None:
+    try:
+        op.add_column(table, column)
+    except Exception as e:
+        if "duplicate column" in str(e).lower() or "already exists" in str(e).lower():
+            pass
+        else:
+            raise
+
     # ── User columns ──────────────────────────────────────────────────────────
-    op.add_column("users", sa.Column("streak_frozen_until", sa.DateTime(), nullable=True))
-    op.add_column("users", sa.Column("xp_boost_until", sa.DateTime(), nullable=True))
+    _add_column_if_not_exists("users", sa.Column("streak_frozen_until", sa.DateTime(), nullable=True))
+    _add_column_if_not_exists("users", sa.Column("xp_boost_until", sa.DateTime(), nullable=True))
 
 
 def downgrade() -> None:

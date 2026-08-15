@@ -15,13 +15,24 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
+
+def _add_column_if_not_exists(table, column):
+    try:
+        _add_column_if_not_exists(table, column)
+    except Exception as e:
+        if 'duplicate column' in str(e).lower() or 'already exists' in str(e).lower():
+            pass
+        else:
+            raise
+
+
 def upgrade() -> None:
-    op.add_column('rewards', sa.Column('delivery_address_line1', sa.String(length=255), nullable=True))
-    op.add_column('rewards', sa.Column('delivery_address_line2', sa.String(length=255), nullable=True))
-    op.add_column('rewards', sa.Column('delivery_city', sa.String(length=100), nullable=True))
-    op.add_column('rewards', sa.Column('delivery_state', sa.String(length=100), nullable=True))
-    op.add_column('rewards', sa.Column('delivery_pincode', sa.String(length=20), nullable=True))
-    op.add_column('rewards', sa.Column('delivery_landmark', sa.String(length=255), nullable=True))
+    _add_column_if_not_exists('rewards', sa.Column('delivery_address_line1', sa.String(length=255), nullable=True))
+    _add_column_if_not_exists('rewards', sa.Column('delivery_address_line2', sa.String(length=255), nullable=True))
+    _add_column_if_not_exists('rewards', sa.Column('delivery_city', sa.String(length=100), nullable=True))
+    _add_column_if_not_exists('rewards', sa.Column('delivery_state', sa.String(length=100), nullable=True))
+    _add_column_if_not_exists('rewards', sa.Column('delivery_pincode', sa.String(length=20), nullable=True))
+    _add_column_if_not_exists('rewards', sa.Column('delivery_landmark', sa.String(length=255), nullable=True))
 
 
 def downgrade() -> None:
