@@ -16,8 +16,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy source
 COPY . .
 
-# Copy & fix entrypoint before switching user
-COPY --chmod=755 entrypoint.sh /entrypoint.sh
+# Fix entrypoint permissions
+RUN chmod +x /app/entrypoint.sh
 
 # Non-root user
 RUN addgroup --system app && adduser --system --group app
@@ -26,4 +26,4 @@ USER app
 
 EXPOSE 8000
 
-ENTRYPOINT ["/entrypoint.sh"]
+ENTRYPOINT ["/app/entrypoint.sh"]

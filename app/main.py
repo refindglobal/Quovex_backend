@@ -33,7 +33,7 @@ from app.db.redis_client import close_redis, get_redis
 from app.models import *  # noqa: ensure models are registered
 
 # Import routers
-from app.api.v1 import auth, sessions, leaderboard, quiz, users, admin, rewards, badges, app_lock, referral, topics, reports, app_version, support, reward_configs, subjects
+from app.api.v1 import auth, sessions, leaderboard, quiz, users, admin, rewards, badges, app_lock, referral, topics, reports, app_version, support, reward_configs, subjects, study_rooms, wallet, study_history, doubts
 
 # Rate limiting
 from slowapi import _rate_limit_exceeded_handler
@@ -127,6 +127,7 @@ app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 API_PREFIX = "/api/v1"
 app.include_router(auth.router, prefix=API_PREFIX)
 app.include_router(users.router, prefix=API_PREFIX)
+app.include_router(users.streak_router, prefix=API_PREFIX)
 app.include_router(sessions.router, prefix=API_PREFIX)
 app.include_router(leaderboard.router, prefix=API_PREFIX)
 app.include_router(quiz.router, prefix=API_PREFIX)
@@ -143,6 +144,10 @@ app.include_router(reward_configs.router, prefix=API_PREFIX)
 app.include_router(reward_configs.public_router, prefix=API_PREFIX)
 app.include_router(subjects.router, prefix=API_PREFIX)
 app.include_router(subjects.public_router, prefix=API_PREFIX)
+app.include_router(study_rooms.router, prefix=API_PREFIX)
+app.include_router(wallet.router, prefix=API_PREFIX)
+app.include_router(study_history.router, prefix=API_PREFIX)
+app.include_router(doubts.router, prefix=API_PREFIX)
 
 
 @app.get("/health")

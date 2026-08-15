@@ -13,7 +13,7 @@ from app.schemas import (
     SessionStartIn, SessionStartOut,
     SessionEndIn, SessionEndOut, BadgeOut,
     SessionAdDoubleIn, SessionAdDoubleOut,
-    SessionPauseOut, SessionResumeOut, SessionHeartbeatOut,
+    SessionPauseOut, SessionResumeOut, SessionHeartbeatIn, SessionHeartbeatOut,
     SessionOut, SocialUnlockOut, SocialUnlockAdOut,
 )
 from app.services.points_service import (
@@ -46,6 +46,40 @@ SOCIAL_UNLOCK_PER_HOUR = app_config.SOCIAL_UNLOCK_MINUTES_PER_HOUR
 SOCIAL_UNLOCK_AD_BONUS = app_config.SOCIAL_UNLOCK_AD_BONUS_MINUTES
 SOCIAL_UNLOCK_AD_COOLDOWN_HRS = app_config.SOCIAL_UNLOCK_AD_COOLDOWN_HOURS
 
+from pydantic import BaseModel
+
+class TodaySessionSummaryOut(BaseModel):
+    total_minutes_today: int
+    target_minutes: int
+    sessions_count: int
+    xp_today: int
+
+@router.get("/today", response_model=TodaySessionSummaryOut)
+async def get_today_session(
+    current_user: User = Depends(get_current_user),
+    db: DBSession = Depends(get_db),
+):
+    """Get today's total focus minutes, goal target, session count, and XP."""
+    now = datetime.now(timezone.utc)
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    sessions = db.query(StudySession).filter(
+        StudySession.user_id == current_user.id,
+        StudySession.start_time >= today_start,
+        StudySession.is_active == False
+    ).all()
+
+    total_mins = sum(s.verified_minutes for s in sessions)
+    xp_today = sum(s.points_awarded for s in sessions)
+    target_mins = int((current_user.daily_study_target_minutes or 4.0) * 60) if current_user.daily_study_target_minutes else 240
+
+    return TodaySessionSummaryOut(
+        total_minutes_today=total_mins,
+        target_minutes=target_mins,
+        sessions_count=len(sessions),
+        xp_today=xp_today
+    )
+
 
 @router.post("/start", response_model=SessionStartOut)
 async def start_session(
@@ -69,9 +103,24 @@ async def start_session(
     if current_user.daily_study_target_minutes and current_user.daily_study_target_minutes > 0:
         current_user.app_lock_enabled = True
 
+    # Normalize mode string to StudyMode enum
+    raw_mode = (body.mode or "focus").lower()
+    if raw_mode in ["mode_a", "offline", "strict"]:
+        study_mode = StudyMode.offline
+    elif raw_mode in ["mode_b", "online", "digital"]:
+        study_mode = StudyMode.online
+    elif raw_mode in ["mode_c", "focus", "youtube"]:
+        study_mode = StudyMode.focus
+    elif raw_mode in ["mode_d", "pomodoro"]:
+        study_mode = StudyMode.pomodoro
+    elif raw_mode in ["exam"]:
+        study_mode = StudyMode.exam
+    else:
+        study_mode = StudyMode.focus
+
     session = StudySession(
         user_id=current_user.id,
-        mode=body.mode,
+        mode=study_mode,
         start_time=datetime.now(timezone.utc),
         subject_tag=body.subject_tag,
         exam_tag=body.exam_tag,
@@ -87,7 +136,7 @@ async def start_session(
     return SessionStartOut(
         session_id=session.id,
         started_at=session.start_time,
-        mode=session.mode,
+        mode=session.mode.value if hasattr(session.mode, "value") else str(session.mode),
     )
 
 
@@ -130,7 +179,8 @@ async def end_session(
         session.honor_check_failures = body.honor_check_failures
 
     # Calculate raw minutes (exclude paused time)
-    elapsed_seconds = int((now - session.start_time).total_seconds()) - session.total_paused_seconds
+    st = session.start_time if (session.start_time and session.start_time.tzinfo) else session.start_time.replace(tzinfo=timezone.utc)
+    elapsed_seconds = int((now - st).total_seconds()) - (session.total_paused_seconds or 0)
     raw_minutes = max(0, elapsed_seconds // 60)
     session.raw_minutes = raw_minutes
 
@@ -180,6 +230,12 @@ async def end_session(
             app_settings.APP_LOCK_MAX_CREDITS,
         )
 
+    # Study Wallet credit: 15 minutes per verified study hour (PRD §4.2)
+    # Formula: earned_wallet_minutes = floor(verified_minutes / 60) * 15
+    wallet_minutes_earned = (verified_minutes // 60) * 15
+    if wallet_minutes_earned > 0:
+        current_user.wallet_minutes = (current_user.wallet_minutes or 0) + wallet_minutes_earned
+
     # Daily target → auto-unlock
     daily_target_met = False
     if current_user.daily_study_target_minutes and current_user.daily_study_target_minutes > 0:
@@ -215,11 +271,23 @@ async def end_session(
         streak_count=current_user.streak_count,
         ad_double_available=ad_doubles_available and not session.flagged,
         social_unlock_minutes_earned=social_earned,
+        wallet_minutes_earned=wallet_minutes_earned,
         flagged=session.flagged,
         message="Great session! Keep up the focus." if not session.flagged else "Session flagged for review.",
         new_badges=new_badges,
         daily_target_met=daily_target_met,
     )
+
+
+@router.post("/{session_id}/ad-double", response_model=SessionAdDoubleOut)
+async def ad_double_session_by_id(
+    session_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: DBSession = Depends(get_db),
+):
+    """Apply 2x points multiplier by session ID in URL path."""
+    body = SessionAdDoubleIn(session_id=session_id)
+    return await ad_double_session(body, current_user, db)
 
 
 @router.post("/ad-double", response_model=SessionAdDoubleOut)
@@ -364,10 +432,11 @@ async def resume_session(
 @router.post("/{session_id}/heartbeat", response_model=SessionHeartbeatOut)
 async def session_heartbeat(
     session_id: UUID,
+    body: SessionHeartbeatIn = None,
     current_user: User = Depends(get_current_user),
     db: DBSession = Depends(get_db),
 ):
-    """Heartbeat to keep session alive. Flutter calls every 30s during online mode."""
+    """Heartbeat to keep session alive and record liveness checks."""
     session = (
         db.query(StudySession)
         .filter(
@@ -379,8 +448,17 @@ async def session_heartbeat(
     )
     if not session:
         raise HTTPException(status_code=404, detail="Active session not found")
+
+    if body:
+        if body.liveness_passed is False:
+            session.honor_check_failures = (session.honor_check_failures or 0) + 1
+        if body.app_violation_count is not None and hasattr(session, "distraction_count"):
+            session.distraction_count = body.app_violation_count
+        db.commit()
+
     now = datetime.now(timezone.utc)
-    elapsed = int((now - session.start_time).total_seconds()) - session.total_paused_seconds
+    st = session.start_time if (session.start_time and session.start_time.tzinfo) else session.start_time.replace(tzinfo=timezone.utc)
+    elapsed = int((now - st).total_seconds()) - (session.total_paused_seconds or 0)
     return SessionHeartbeatOut(status="ok", elapsed_seconds=max(0, elapsed))
 
 

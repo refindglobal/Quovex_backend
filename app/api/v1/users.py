@@ -15,6 +15,28 @@ from sqlalchemy import func
 
 router = APIRouter(prefix="/users", tags=["users"])
 
+from pydantic import BaseModel
+
+class StreakOut(BaseModel):
+    current_streak: int
+    longest_streak: int
+    freeze_available: int
+
+streak_router = APIRouter(prefix="/streak", tags=["streak"])
+
+@streak_router.get("", response_model=StreakOut)
+@streak_router.get("/", response_model=StreakOut)
+async def get_streak(
+    current_user: User = Depends(get_current_user),
+    db: DBSession = Depends(get_db),
+):
+    """Get current streak status."""
+    return StreakOut(
+        current_streak=current_user.streak_count or 0,
+        longest_streak=current_user.streak_count or 0,
+        freeze_available=1 if current_user.streak_frozen_until else 0,
+    )
+
 
 def _auto_advance_class_if_april(user: User, db: DBSession) -> bool:
     """Auto-advance class/year if it's April and not already advanced this year."""

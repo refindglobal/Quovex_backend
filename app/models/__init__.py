@@ -627,3 +627,24 @@ class UserTopicProgress(Base, TimestampMixin):
 
     topic = relationship("Topic", back_populates="user_progress")
     user = relationship("User", back_populates="topic_progress")
+
+
+class Doubt(Base, TimestampMixin):
+    """AI Doubt Solver — stores question, step-by-step reasoning, and final answer."""
+    __tablename__ = "doubts"
+
+    id = Column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(Uuid(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    question_text = Column(Text, nullable=False)
+    subject = Column(String(100), nullable=False, default="General")
+    image_url = Column(Text, nullable=True)
+    # JSON: list of {"step": int, "title": str, "content": str}
+    step_by_step_explanation = Column(JSON, default=list, nullable=False)
+    final_answer = Column(Text, nullable=False, default="")
+    # JSON: list of str (formulas / key rules)
+    key_concepts = Column(JSON, default=list, nullable=False)
+    # JSON: list of str (related topic names)
+    related_topics = Column(JSON, default=list, nullable=False)
+    is_bookmarked = Column(Boolean, default=False, nullable=False)
+
+    user = relationship("User", backref="doubts")

@@ -1,9 +1,12 @@
 """Auth router - handles user registration/profile via Firebase tokens,
 and admin dashboard login via email + password (JWT)."""
+import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
+
+logger = logging.getLogger(__name__)
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, EmailStr
@@ -157,6 +160,9 @@ class VerifyOtpOut(BaseModel):
 async def send_otp(body: SendOtpIn, request: Request, db: Session = Depends(get_db)):
     """Generate and send a 6-digit OTP to the given email."""
     otp = generate_otp(body.email, db=db, ip_address=request.client.host if request.client else None)
+    logger.info("=" * 50)
+    logger.info(f"🔑 [AUTH OTP] Generated code for {body.email}: {otp}")
+    logger.info("=" * 50)
     send_otp_email(body.email, otp)
     return SendOtpOut(
         success=True,

@@ -36,7 +36,7 @@ class UserProfileOut(BaseModel):
     avatar_url: Optional[str] = None
     country: Optional[str] = None
     state: Optional[str] = None
-    exam_tags: List[str] = []
+    exam_tags: Optional[List[str]] = []
     primary_subject: Optional[str] = None
     points_total: int = 0
     verified_minutes_total: int = 0
@@ -61,7 +61,7 @@ class UserProfileOut(BaseModel):
     exam_target: Optional[str] = None
     study_goal: Optional[str] = None
     daily_target_hours: Optional[float] = None
-    blocked_apps: List[str] = []
+    blocked_apps: Optional[List[str]] = []
     study_time_preference: Optional[str] = None
     reset_time_hour: Optional[int] = 8
     lock_mode: Optional[str] = "STRICT"
@@ -75,7 +75,7 @@ class UserProfileOut(BaseModel):
     last_active: Optional[datetime] = None
     app_lock_enabled: bool = False
     app_lock_credits: int = 0
-    locked_app_packages: Optional[list] = None
+    locked_app_packages: Optional[List[str]] = None
     daily_study_target_minutes: int = 120
     language: str = "en"
     notification_prefs: Optional[dict] = None
@@ -253,6 +253,7 @@ class SessionEndOut(BaseModel):
     streak_count: int
     ad_double_available: bool
     social_unlock_minutes_earned: int
+    wallet_minutes_earned: int = 0   # 15 min per verified study hour (PRD §4.2)
     flagged: bool
     message: str
     new_badges: Optional[list] = None
@@ -277,6 +278,11 @@ class SessionPauseOut(BaseModel):
 class SessionResumeOut(BaseModel):
     status: str
     resumed_at: datetime
+
+
+class SessionHeartbeatIn(BaseModel):
+    liveness_passed: Optional[bool] = None
+    app_violation_count: Optional[int] = None
 
 
 class SessionHeartbeatOut(BaseModel):
@@ -780,3 +786,60 @@ class GradeSubjectOut(BaseModel):
     display_order: int
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+
+
+# ─── AI Doubt Solver ──────────────────────────────────────────────────────────
+
+class DoubtSolveIn(BaseModel):
+    question_text: str
+    subject: Optional[str] = "General"
+    image_base64: Optional[str] = None   # base64 of photo from OCR camera
+    follow_up_action: Optional[str] = None  # "simplify" | "example" | "derive" | "quiz_me"
+
+
+class DoubtStepOut(BaseModel):
+    step: int
+    title: str
+    content: str
+
+
+class DoubtSolveOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    doubt_id: UUID
+    question_text: str
+    subject: str
+    question_type: str = "factual"        # factual | numerical | conceptual | teach_me
+    confidence: str = "high"              # high | medium | estimated
+    confidence_label: str = "Textbook verified"
+    steps: list[DoubtStepOut]
+    final_answer: str
+    key_concepts: list[str]
+    related_topics: list[str]
+
+
+class DoubtHistoryOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    doubt_id: UUID
+    question_text: str
+    subject: str
+    final_answer: str
+    key_concepts: list[str]
+    is_bookmarked: bool
+    created_at: Optional[datetime] = None
+
+
+class DoubtBookmarkIn(BaseModel):
+    doubt_id: UUID
+    is_bookmarked: bool
+
+
+# ─── OCR Camera ───────────────────────────────────────────────────────────────
+
+class OcrExtractIn(BaseModel):
+    image_base64: str   # base64-encoded image
+
+
+class OcrExtractOut(BaseModel):
+    extracted_text: str
+    detected_subject: Optional[str] = None
+    confidence: float = 0.0
