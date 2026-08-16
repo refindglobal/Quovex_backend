@@ -739,19 +739,18 @@ def _call_llm_for_doubt(
     Returns parsed (steps, final_answer, key_concepts, related_topics) or None if both fail.
     """
     system_prompt = (
-        "You are an elite, pedagogical STEM and Mathematics AI Tutor for students preparing for CBSE, JEE Main/Advanced, and NEET. "
-        "You excel at algebra, calculus (derivatives, integrals, limits), trigonometry, coordinate geometry, matrices, probability, and physics numericals. "
-        "Explain concepts and calculations step by step with crystal clarity and rigorous mathematical accuracy. "
-        "Maintain full conversational context from previous messages if this is a follow-up or clarification question. "
+        "You are an elite, pedagogical, multi-disciplinary AI Mentor for students (CBSE, ICSE, JEE, NEET, UPSC, STEM, History, and Humanities). "
+        "Provide intelligent, natural, and beautifully formatted explanations tailored to the student's question:\n"
+        "- For History, Social Science, and Humanities (e.g. Akbar, Mughal Empire, World War, Geography): Provide a rich, structured, engaging explanation with historical context, key milestones, strategies, and impacts. Do NOT force the answer into artificial numbered step cards.\n"
+        "- For Diagrams / Schematics (e.g. 'draw a diagram', 'circuit schematic', 'ray diagram'): Provide a clean ASCII/Unicode diagram with labeled parts and clear explanations.\n"
+        "- For Mathematics, Physics, and Chemistry numericals/derivations: Provide complete, accurate algebraic calculations and steps.\n\n"
         "CRITICAL FORMAT RULES:\n"
-        "1. Write 100% in plain readable text. Use standard arithmetic operators (+, -, *, /, ^, sqrt, integral, dy/dx, lim). Avoid raw LaTeX command tags like \\frac or \\text.\n"
-        "2. For math equations, show every intermediate algebraic manipulation and substitution clearly.\n"
-        "3. Provide the definitive final numerical root or closed-form answer in 'final_answer'.\n"
-        "4. Output ONLY a valid JSON object with these exact keys:\n"
-        "   - 'final_answer': string (the direct, definitive, human-readable answer)\n"
-        "   - 'steps': array of objects, each having 'step' (integer), 'title' (string), 'content' (string with clear math steps)\n"
-        "   - 'key_concepts': array of strings (formulas/constants to remember)\n"
-        "   - 'related_topics': array of strings\n"
+        "1. Write in clean, plain readable text with natural paragraphs and bullet points. Use standard math symbols (+, -, *, /, ^).\n"
+        "2. Output ONLY a valid JSON object with these exact keys:\n"
+        "   - 'final_answer': string (The primary, complete, detailed explanation/answer/diagram)\n"
+        "   - 'steps': array of objects with 'step' (integer), 'title' (string), 'content' (string). ONLY populate this for multi-step math/physics numerical problems. For history, conceptual, descriptive, and diagram questions, return an empty array [].\n"
+        "   - 'key_concepts': array of strings (key formulas, historical dates, or core takeaways)\n"
+        "   - 'related_topics': array of strings (relevant study topics)\n"
     )
 
     messages = [{"role": "system", "content": system_prompt}]
@@ -827,15 +826,26 @@ def _call_llm_for_doubt(
 def _clean_text(s: str) -> str:
     if not s:
         return ""
-    # Strip markdown bold tags without stripping math operators
+    # Strip LaTeX commands and convert to plain readable text
+    s = re.sub(r"\\frac\{([^}]+)\}\{([^}]+)\}", r"(\1 / \2)", s)
+    s = re.sub(r"\\sqrt\{([^}]+)\}", r"sqrt(\1)", s)
+    s = re.sub(r"\\text\{([^}]+)\}", r"\1", s)
+    s = re.sub(r"\\mathbf\{([^}]+)\}", r"\1", s)
+    s = re.sub(r"\\math[a-zA-Z]+\{([^}]+)\}", r"\1", s)
+    s = s.replace(r"\(", "").replace(r"\)", "").replace(r"\[", "").replace(r"\]", "")
+    s = s.replace(r"\pm", "+/-").replace(r"\times", " * ").replace(r"\cdot", " * ")
+    s = s.replace(r"\le", "<=").replace(r"\ge", ">=").replace(r"\neq", "!=")
+    
+    # Strip markdown bold tags without stripping math multiplication
     s = re.sub(r"\*\*([^*]+)\*\*", r"\1", s)
     s = s.replace("**", "").replace("`", "")
-    # Normalize unicode math symbols
+    
+    # Normalize unicode math and typography symbols
     repl = {
         "π": "pi", "θ": "theta", "λ": "lambda", "α": "alpha", "β": "beta",
         "×": " * ", "²": "^2", "³": "^3", "⁴": "^4", "⁻": "^-", "₀": "_0",
         "₁": "_1", "₂": "_2", "ε": "epsilon", "μ": "mu", "Ω": " Ohm",
-        "√": "sqrt", "½": "1/2", "—": " -- ", "–": " - ", "→": " -> ",
+        "√": "sqrt", "½": "1/2", "—": " -- ", "–": " - ", "‑": "-", "→": " -> ",
         "↑": " increases ", "↓": " decreases ", "±": "+/-", "≠": "!=",
         "∫": "integral ", "∂": "d", "≤": "<=", "≥": ">="
     }
@@ -865,7 +875,7 @@ def _parse_llm_json(content: str) -> Optional[Tuple[List[DoubtStepOut], str, Lis
         final_ans = _clean_text(str(data.get("final_answer", "")))
         key_concepts = [_clean_text(str(k)) for k in data.get("key_concepts", []) if str(k).strip()]
         related_topics = [_clean_text(str(t)) for t in data.get("related_topics", []) if str(t).strip()]
-        if steps and final_ans:
+        if final_ans:
             return steps, final_ans, key_concepts, related_topics
     except Exception:
         pass
