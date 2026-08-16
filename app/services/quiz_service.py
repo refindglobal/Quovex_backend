@@ -101,19 +101,22 @@ def select_questions(
     if combined:
         return combined[:count]
 
-    # Fallback 2: subject-only match (ignore grade) — ensures something is returned
-    # This is safe because the question will still be from the correct subject
-    last_resort = (
-        db.query(QuizQuestion)
-        .filter(
-            QuizQuestion.status == QuestionStatus.live,
-            QuizQuestion.subject == subject,
+    # Fallback 2: Only fallback to subject-only if no grade or exam constraint was specified.
+    # If grade_or_tag was specified (e.g. Class 9), NEVER serve questions from other grades.
+    if not grade_or_tag and not exam_tag and subject:
+        last_resort = (
+            db.query(QuizQuestion)
+            .filter(
+                QuizQuestion.status == QuestionStatus.live,
+                QuizQuestion.subject == subject,
+            )
+            .limit(count * 3)
+            .all()
         )
-        .limit(count * 3)
-        .all()
-    ) if subject else []
-    random.shuffle(last_resort)
-    return last_resort[:count]
+        random.shuffle(last_resort)
+        return last_resort[:count]
+
+    return []
 
 
 def check_answer(question: QuizQuestion, selected: Optional[str]) -> bool:

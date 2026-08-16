@@ -82,10 +82,12 @@ def _pick_groq_key() -> str:
 
 def _call_cerebras(api_key: str, subject: str, exam_tag: str, difficulty: str, count: int) -> List[dict]:
     """Call Cerebras API for question generation with Groq fallback on failure."""
-    is_school_grade = exam_tag.startswith("Class ")
+    is_school_grade = exam_tag.startswith("Class ") or "CLASS " in exam_tag.upper()
     context_note = (
-        f"These questions are for {exam_tag} school students (age ~{_grade_to_age(exam_tag)}). "
-        f"Keep language simple and age-appropriate."
+        f"CRITICAL CONSTRAINT: These questions are STRICTLY for {exam_tag} students (age ~{_grade_to_age(exam_tag)}). "
+        f"Only use syllabus topics from standard {exam_tag} curriculum. "
+        f"DO NOT include advanced Class 11, Class 12, JEE, or college concepts (e.g. NO calculus, complex integrals, or quantum mechanics). "
+        f"Keep language and concepts strictly at {exam_tag} level."
         if is_school_grade
         else f"These questions are for {exam_tag} competitive exam preparation."
     )
