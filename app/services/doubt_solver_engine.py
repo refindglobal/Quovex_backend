@@ -959,21 +959,76 @@ def _pick_cerebras_key() -> str:
 
 
 def perform_live_web_search(query: str, max_results: int = 4) -> str:
-    """Fetch live web snippets for up-to-date factual accuracy."""
+    """Fetch live web snippets for up-to-date factual accuracy using multiple resilient fallbacks."""
+    # 1. Try ddgs / duckduckgo_search library
     try:
         from ddgs import DDGS
         results = list(DDGS().text(query, max_results=max_results))
-        if not results:
-            return ""
-        snippets = []
-        for r in results:
-            title = r.get("title", "")
-            body = r.get("body", "")
-            if body:
-                snippets.append(f"Source: {title}\nInfo: {body}")
-        return "\n\n".join(snippets)
-    except Exception as e:
-        return ""
+        if results:
+            snippets = []
+            for r in results:
+                title = r.get("title", "")
+                body = r.get("body", "")
+                if body:
+                    snippets.append(f"Source: {title}\nInfo: {body}")
+            if snippets:
+                return "\n\n".join(snippets)
+    except Exception:
+        pass
+
+    try:
+        from duckduckgo_search import DDGS
+        results = list(DDGS().text(query, max_results=max_results))
+        if results:
+            snippets = []
+            for r in results:
+                title = r.get("title", "")
+                body = r.get("body", "")
+                if body:
+                    snippets.append(f"Source: {title}\nInfo: {body}")
+            if snippets:
+                return "\n\n".join(snippets)
+    except Exception:
+        pass
+
+    # 2. Fallback to direct DuckDuckGo HTML request with httpx (0 external dependencies)
+    try:
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.5",
+        }
+        with httpx.Client(timeout=6, follow_redirects=True, headers=headers) as client:
+            resp = client.post("https://html.duckduckgo.com/html/", data={"q": query})
+            if resp.status_code == 200:
+                from html import unescape
+                matches = re.findall(r'<a class="result__snippet[^"]*"[^>]*>(.*?)</a>', resp.text, re.DOTALL)
+                snippets = []
+                for m in matches[:max_results]:
+                    clean = re.sub(r"<.*?>", "", m).strip()
+                    if clean:
+                        snippets.append(unescape(clean))
+                if snippets:
+                    return "\n\n".join(snippets)
+    except Exception:
+        pass
+
+    # 3. Fallback to Wikipedia OpenSearch API
+    try:
+        wiki_url = f"https://en.wikipedia.org/w/api.php?action=opensearch&search={query}&limit=3&namespace=0&format=json"
+        with httpx.Client(timeout=5, headers={"User-Agent": "QuovexTutorBot/1.0"}) as client:
+            r = client.get(wiki_url)
+            if r.status_code == 200:
+                data = r.json()
+                titles = data[1] if len(data) > 1 else []
+                descriptions = data[2] if len(data) > 2 else []
+                snippets = [f"{t}: {d}" for t, d in zip(titles, descriptions) if d]
+                if snippets:
+                    return "\n\n".join(snippets)
+    except Exception:
+        pass
+
+    return ""
 
 
 def _clean_text(s: str) -> str:
@@ -1007,7 +1062,7 @@ def _call_llm_for_doubt(
     needs_search = any(k in q_low for k in [
         "who is", "current", "2026", "2025", "minister", "president", "capital", "winner",
         "latest", "today", "news", "discovery", "ceo", "governor", "ranking", "olympics", "who",
-        "chief minister", "prime minister", "cabinet"
+        "chief minister", "prime minister", "cabinet", "bihar", "tamil nadu", "india"
     ]) or question_type == "factual"
 
     if needs_search:
@@ -1040,10 +1095,14 @@ def _call_llm_for_doubt(
         "   - Use clean Unicode math & chemical symbols (e.g. x², √x, π, θ, Δ, CO₂, H₂SO₄, ∫, 1/2) instead of raw LaTeX tags.\n"
         "   - If a diagram/visual layout is requested (e.g. circuit, ray optics, cell, flowchart), render a clean ASCII/Unicode diagram block with clear labels inside the step content.\n"
         "   - Tailor explanation depth and tone to the student's grade/exam level.\n"
-        "   - Always answer directly and confidently using the live web search information and verified facts. NEVER mention 'knowledge cutoff', 'as of my training', or disclaimers."
+        "   - If Live Web Search Information is provided, strictly use it to provide the exact up-to-date factual answer as of 2026.\n"
+        "   - NEVER output disclaimers such as 'As of my knowledge cutoff', 'I do not have real-time information', or 'knowledge prior to 2026'. State the facts directly."
     )
 
-    user_parts = [f"Question: {question_text}", f"Subject: {subject}"]
+    user_parts = []
+    if search_context:
+        user_parts.append(f"[LIVE WEB SEARCH VERIFIED FACTS (YEAR 2026)]:\n{search_context}\n(Use the above live information to answer the question directly and accurately)")
+    user_parts.extend([f"Question: {question_text}", f"Subject: {subject}"])
     if user_context:
         user_parts.append(f"Student Context: {user_context}")
     if follow_up_action:
