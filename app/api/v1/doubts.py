@@ -79,8 +79,8 @@ from app.services.doubt_solver_engine import solve_doubt_intelligently, detect_s
 
 @router.post("/doubts/solve", response_model=DoubtSolveOut)
 async def solve_doubt(body: DoubtSolveIn, current_user: User = Depends(get_current_user), db: DBSession = Depends(get_db)):
-    if not body.question_text or len(body.question_text.strip()) < 5:
-        raise HTTPException(status_code=422, detail="Question text is too short")
+    if not body.question_text or len(body.question_text.strip()) < 2:
+        raise HTTPException(status_code=422, detail="Question text must be at least 2 characters")
     subject = detect_subject(body.question_text, body.subject)
     
     user_context = body.user_context

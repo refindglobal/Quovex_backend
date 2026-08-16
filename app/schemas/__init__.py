@@ -818,7 +818,7 @@ class ChatMessageIn(BaseModel):
 
 
 class DoubtSolveIn(BaseModel):
-    question_text: str
+    question_text: str = Field(..., min_length=2, max_length=5000)
     subject: Optional[str] = "General"
     image_base64: Optional[str] = None   # base64 of photo from OCR camera
     follow_up_action: Optional[str] = None  # "simplify" | "example" | "derive" | "quiz_me"
