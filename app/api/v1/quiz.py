@@ -337,8 +337,21 @@ async def get_daily_quiz(
 
 
     now = datetime.now(timezone.utc)
+    session_obj = QuizSession(
+        user_id=current_user.id,
+        subject=subject,
+        exam_tag=exam_tag,
+        grade_or_tag=grade_or_tag,
+        difficulty_mode=Difficulty.adaptive,
+        question_ids=[str(q.id) for q in questions],
+        start_time=now,
+    )
+    db.add(session_obj)
+    db.commit()
+    db.refresh(session_obj)
+
     return DailyQuizOut(
-        quiz_id=str(uuid4()),
+        quiz_id=str(session_obj.id),
         questions=[QuizQuestionOut.model_validate(q) for q in questions],
         date=now.strftime("%Y-%m-%d"),
         expires_at=(now + timedelta(days=1)).isoformat(),
@@ -415,8 +428,21 @@ async def generate_topic_quiz(
             logger.warning(f"Failed to generate topic quiz: {e}")
 
     now = datetime.now(timezone.utc)
+    session_obj = QuizSession(
+        user_id=current_user.id,
+        subject=subject,
+        exam_tag=exam_tag,
+        grade_or_tag=grade_or_tag,
+        difficulty_mode=Difficulty[diff_val],
+        question_ids=[str(q.id) for q in questions],
+        start_time=now,
+    )
+    db.add(session_obj)
+    db.commit()
+    db.refresh(session_obj)
+
     return TopicQuizOut(
-        quiz_id=str(uuid4()),
+        quiz_id=str(session_obj.id),
         questions=[QuizQuestionOut.model_validate(q) for q in questions],
         topic=body.topic,
         generated_at=now.isoformat(),
