@@ -56,8 +56,11 @@ async def lifespan(app: FastAPI):
             logger.warning("SECRET_KEY is still set to the default value! Change it immediately.")
         logger.info(f"Allowed origins: {settings.ALLOWED_ORIGINS}")
 
-    if settings.ENVIRONMENT != "production":
+    try:
         Base.metadata.create_all(bind=engine)
+        logger.info("Database tables verified/created successfully.")
+    except Exception as e:
+        logger.warning(f"Database table verification skipped/warning: {e}")
     yield
     # Shutdown
     await close_redis()

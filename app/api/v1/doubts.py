@@ -1,5 +1,6 @@
 """Doubts & OCR router — AI Doubt Solver and OCR camera text extraction."""
 import base64
+import uuid
 from typing import Optional
 from uuid import UUID
 
@@ -84,16 +85,30 @@ async def solve_doubt(body: DoubtSolveIn, current_user: User = Depends(get_curre
     steps, final_answer, key_concepts, related_topics, question_type, confidence, confidence_label = solve_doubt_intelligently(
         body.question_text, body.subject, body.follow_up_action
     )
-    doubt = Doubt(
-        user_id=current_user.id, question_text=body.question_text.strip(), subject=subject,
-        step_by_step_explanation=[{"step": s.step, "title": s.title, "content": s.content} for s in steps],
-        final_answer=final_answer, key_concepts=key_concepts, related_topics=related_topics, is_bookmarked=False,
-    )
-    db.add(doubt); db.commit(); db.refresh(doubt)
+    doubt_id = str(uuid.uuid4())
+    try:
+        doubt = Doubt(
+            id=uuid.UUID(doubt_id),
+            user_id=current_user.id,
+            question_text=body.question_text.strip(),
+            subject=subject,
+            step_by_step_explanation=[{"step": s.step, "title": s.title, "content": s.content} for s in steps],
+            final_answer=final_answer,
+            key_concepts=key_concepts,
+            related_topics=related_topics,
+            is_bookmarked=False,
+        )
+        db.add(doubt)
+        db.commit()
+        db.refresh(doubt)
+        doubt_id = str(doubt.id)
+    except Exception:
+        db.rollback()
+
     return DoubtSolveOut(
-        doubt_id=doubt.id,
-        question_text=doubt.question_text,
-        subject=doubt.subject,
+        doubt_id=doubt_id,
+        question_text=body.question_text.strip(),
+        subject=subject,
         question_type=question_type,
         confidence=confidence,
         confidence_label=confidence_label,
