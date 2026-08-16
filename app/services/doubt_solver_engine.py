@@ -689,7 +689,7 @@ def _apply_follow_up(
 
     elif action == "example":
         example_step = DoubtStepOut(
-            step=len(original_steps) + 1,
+        step=len(original_steps) + 1,
             title="A Real-Life Example",
             content=f"Here is a concrete, everyday example that makes this concept click:\n\n"
                     f"In your daily life, {subject.lower()} concepts like this appear when you:\n"
@@ -736,6 +736,8 @@ def _apply_follow_up(
 #  LIVE AI ENGINE (Cerebras -> Groq Fallback)
 # ─────────────────────────────────────────────────────────────
 
+import datetime as _dt
+
 def _call_llm_for_doubt(
     question: str,
     subject: str,
@@ -747,20 +749,33 @@ def _call_llm_for_doubt(
     Calls Cerebras API first, with automatic fallback to Groq API.
     Returns parsed (steps, final_answer, key_concepts, related_topics) or None if both fail.
     """
+    today_str = _dt.date.today().strftime("%B %d, %Y")
     system_prompt = (
-        "You are an elite, pedagogical, multi-disciplinary AI Mentor for students (CBSE, ICSE, JEE, NEET, UPSC, STEM, History, and Humanities). "
-        "Provide intelligent, natural, and beautifully formatted explanations tailored to the student's question:\n"
-        "- For History, Social Science, and Humanities (e.g. Akbar, Mughal Empire, World War, Geography): Provide a rich, structured, engaging explanation with historical context, key milestones, strategies, and impacts. Do NOT force the answer into artificial numbered step cards.\n"
-        "- For Diagrams, Schematics & Visuals (e.g. 'draw diagram', 'ray diagram', 'circuit diagram', 'flowchart', 'cell diagram', 'graph', 'schematic'):\n"
-        "  You MUST include a clean, beautifully aligned visual ASCII/Unicode diagram enclosed inside a markdown code block (```diagram\\n...\\n```) using precision box-drawing and schematic symbols (─ │ ┌ ┐ └ ┘ ├ ┤ ┬ ┴ ┼ ► ◄ ▲ ▼ ○ ● ⚡ ⊕ ⊖ ──[ R ]── ──( A )── ──| |── ──[ S ]──). Follow it with labeled component explanations, ray tracing/working principle, and key formula.\n"
-        "- For Mathematics, Physics, and Chemistry numericals/derivations: Provide complete, accurate algebraic calculations and steps.\n\n"
-        "CRITICAL FORMAT RULES:\n"
-        "1. Write in clean, plain readable text with natural paragraphs and bullet points. Use standard math symbols (+, -, *, /, ^).\n"
-        "2. Output ONLY a valid JSON object with these exact keys:\n"
-        "   - 'final_answer': string (The primary, complete, detailed explanation/answer/diagram)\n"
-        "   - 'steps': array of objects with 'step' (integer), 'title' (string), 'content' (string). ONLY populate this for multi-step math/physics numerical problems. For history, conceptual, descriptive, and diagram questions, return an empty array [].\n"
-        "   - 'key_concepts': array of strings (key formulas, historical dates, or core takeaways)\n"
-        "   - 'related_topics': array of strings (relevant study topics)\n"
+        f"You are an elite AI Mentor and Study Coach for Indian students (CBSE, ICSE, JEE, NEET, UPSC, History, Humanities, current affairs). "
+        f"Today's date is {today_str}. You have comprehensive, up-to-date knowledge on all subjects including recent events, current affairs, and latest developments.\n\n"
+        "ANSWER STYLE RULES (follow strictly):\n"
+        "1. Write in clean, plain English. Natural paragraphs and bullet points using - or numbers.\n"
+        "2. NEVER use **bold**, _italic_, or any markdown formatting symbols in text. Write everything as plain text.\n"
+        "3. Do NOT use LaTeX or any math markup. Write math plainly: sqrt(D) = 7, x = (11 + 7) / 6, F = m x a.\n"
+        "4. For History, Current Affairs, Social Science, Geography: give a rich, flowing narrative with specific dates, names, causes, and consequences. Be detailed and engaging like a great teacher.\n"
+        "5. For Science and Math concepts: explain with intuitive real-life analogies first, then the formula.\n"
+        "6. For numerical problems: show the working clearly step by step in plain text paragraphs.\n"
+        "7. Be specific and accurate. Mention real names, real dates, real numbers.\n\n"
+        "DIAGRAM RULES (critical - follow exactly for any diagram/schematic/circuit/ray diagram/structure request):\n"
+        "- You MUST draw a clear, well-aligned visual diagram using box-drawing characters.\n"
+        "- Put the diagram inside a markdown code block starting with ``` and ending with ```.\n"
+        "- Use these characters ONLY: ─ │ ┌ ┐ └ ┘ ├ ┤ ┬ ┴ ┼\n"
+        "- For electric circuits: ──[R]── = resistor, ──(A)── = ammeter, ──||── = battery cell, ──/── = open switch, ──LED── = LED\n"
+        "- For ray diagrams: use ─── for rays, | for mirror/lens surface, F for focal point, C for centre of curvature, ↑ for object, ↓ for image\n"
+        "- For biological structures: use box-drawing to show cell parts with labels connected by │ lines\n"
+        "- Make diagrams at least 55 characters wide with clear labels on the same line as components.\n"
+        "- After the code block, explain each labeled component in plain text with 1-2 sentences each.\n\n"
+        "OUTPUT FORMAT - respond with ONLY valid JSON, absolutely no other text before or after:\n"
+        '{"final_answer": "complete explanation. For diagrams put the ```code block``` inside this string using \\n for newlines.", '
+        '"steps": [], '
+        '"key_concepts": ["key fact or formula 1", "key fact or formula 2", "key fact or formula 3"], '
+        '"related_topics": ["related topic 1", "related topic 2"]}\n\n'
+        "RULE: The steps array MUST always be [] (empty). Never add steps."
     )
 
     messages = [{"role": "system", "content": system_prompt}]
@@ -777,7 +792,7 @@ def _call_llm_for_doubt(
                 mapped_role = "assistant" if str(r).lower() in ("assistant", "ai", "model") else "user"
                 messages.append({"role": mapped_role, "content": str(c).strip()})
 
-    user_prompt = f"Subject: {subject}\nQuestion: {question}"
+    user_prompt = f"Subject: {subject}\nQuestion type: {question_type}\nStudent question: {question}"
     if follow_up:
         user_prompt += f"\nFollow-up request: {follow_up}"
 
@@ -793,10 +808,10 @@ def _call_llm_for_doubt(
                 json={
                     "model": settings.CEREBRAS_MODEL,
                     "messages": messages,
-                    "temperature": 0.2,
-                    "max_tokens": 2048,
+                    "temperature": 0.3,
+                    "max_tokens": 4096,
                 },
-                timeout=12
+                timeout=18
             )
             if r.status_code == 200:
                 content = r.json()["choices"][0]["message"]["content"]
@@ -831,6 +846,93 @@ def _call_llm_for_doubt(
             pass
 
     return None
+
+
+# ─────────────────────────────────────────────────────────────
+#  IMAGE VISION SOLVER  (Cerebras gemma-4-31b — FREE Vision)
+# ─────────────────────────────────────────────────────────────
+
+def solve_doubt_from_image(
+    image_base64: str,
+    image_mime: str = "image/jpeg",
+    subject_hint: str = ""
+) -> Tuple[str, List[str], List[str]]:
+    """
+    Accepts a base64-encoded image (photo of a textbook question, handwritten problem,
+    diagram, or equation). Returns (answer_text, key_concepts, related_topics).
+
+    Uses Cerebras gemma-4-31b which is the only model that supports FREE image vision.
+    Falls back gracefully if all keys are rate-limited.
+    """
+    data_uri = f"data:{image_mime};base64,{image_base64}"
+
+    system_prompt = (
+        "You are an expert AI study tutor. The student has sent you a photo of a question, "
+        "math problem, diagram, or textbook page. Your job:\n"
+        "1. Read ALL text, numbers, equations, and labels visible in the image exactly as written.\n"
+        "2. Identify what the question or problem is asking.\n"
+        "3. Solve it completely, step by step, with full working shown.\n"
+        "4. Write in clean plain English only. NO markdown symbols like **, #, __, or *.\n"
+        "5. Write math inline: A x B = 175, not LaTeX or special symbols.\n"
+        "6. At the end, state the final answer clearly on its own line starting with 'Final Answer:'.\n"
+        "Be thorough and educational, as if explaining to a student who is stuck."
+    )
+
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": f"Please read and solve this image.{' Subject: ' + subject_hint if subject_hint else ''}"},
+                {"type": "image_url", "image_url": {"url": data_uri}}
+            ]
+        }
+    ]
+
+    # Cerebras gemma-4-31b is the only FREE vision model — try all keys
+    cerebras_keys = [k.strip() for k in (settings.CEREBRAS_API_KEYS or settings.CEREBRAS_API_KEY).split(",") if k.strip()]
+    for key in cerebras_keys:
+        try:
+            r = httpx.post(
+                "https://api.cerebras.ai/v1/chat/completions",
+                headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                json={
+                    "model": "gemma-4-31b",
+                    "messages": messages,
+                    "temperature": 0.1,
+                    "max_tokens": 1024,
+                },
+                timeout=30
+            )
+            if r.status_code == 200:
+                answer = r.json()["choices"][0]["message"]["content"].strip()
+                # Clean up any stray markdown from response
+                answer = re.sub(r"\*\*(.+?)\*\*", r"\1", answer, flags=re.DOTALL)
+                answer = re.sub(r"#{1,6}\s+", "", answer)
+                answer = re.sub(r"__(.+?)__", r"\1", answer, flags=re.DOTALL)
+
+                # Extract key concepts from the answer (lines with = signs or "Formula:" etc.)
+                key_concepts = []
+                for line in answer.split("\n"):
+                    line = line.strip()
+                    if "=" in line and len(line) < 80 and any(c.isdigit() for c in line):
+                        key_concepts.append(line)
+                    if len(key_concepts) >= 4:
+                        break
+
+                related_topics = [subject_hint] if subject_hint else ["Problem Solving"]
+                return answer, key_concepts[:4], related_topics
+        except Exception:
+            continue
+
+    # All keys failed
+    return (
+        "The image could not be processed right now due to high traffic. "
+        "Please try again in a few seconds, or type your question instead.",
+        [],
+        []
+    )
+
 
 
 def _clean_text(s: str) -> str:

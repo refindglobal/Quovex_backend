@@ -143,16 +143,47 @@ async def toggle_bookmark(body: DoubtBookmarkIn, current_user: User = Depends(ge
     return {"success": True, "is_bookmarked": doubt.is_bookmarked}
 
 
-@router.post("/ocr/extract", response_model=OcrExtractOut)
-async def ocr_extract(body: OcrExtractIn, current_user: User = Depends(get_current_user), db: DBSession = Depends(get_db)):
-    if not body.image_base64:
+from app.services.doubt_solver_engine import solve_doubt_from_image
+
+
+@router.post("/doubts/image-solve")
+async def solve_doubt_from_image_endpoint(
+    body: dict,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Stateless vision endpoint.
+    Accepts a base64-encoded image of a textbook question/problem/diagram.
+    Sends it directly to Cerebras gemma-4-31b (FREE vision model).
+    Returns the full answer + key concepts.
+    The image is NEVER saved — it flows through memory only.
+    """
+    image_base64 = body.get("image_base64", "").strip()
+    image_mime = body.get("image_mime", "image/jpeg")
+    subject_hint = body.get("subject", "")
+
+    if not image_base64:
         raise HTTPException(status_code=422, detail="image_base64 is required")
+
+    # Validate base64
     try:
-        base64.b64decode(body.image_base64, validate=True)
+        import base64 as _b64
+        _b64.b64decode(image_base64, validate=True)
     except Exception:
         raise HTTPException(status_code=422, detail="Invalid base64 image data")
-    # Production: call Google Vision / Gemini Vision API here
-    return OcrExtractOut(
-        extracted_text="A stone is dropped from the top of a tower 100m high. Calculate the time to reach the ground (g = 10 m/s²).",
-        detected_subject="Physics", confidence=0.91,
+
+    # Process through vision model — no DB write, no file write
+    answer, key_concepts, related_topics = solve_doubt_from_image(
+        image_base64=image_base64,
+        image_mime=image_mime,
+        subject_hint=subject_hint,
     )
+
+    return {
+        "answer": answer,
+        "key_concepts": key_concepts,
+        "related_topics": related_topics,
+        "model": "gemma-4-31b",
+        "image_saved": False,
+    }
+
