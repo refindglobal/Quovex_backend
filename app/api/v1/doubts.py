@@ -82,8 +82,22 @@ async def solve_doubt(body: DoubtSolveIn, current_user: User = Depends(get_curre
     if not body.question_text or len(body.question_text.strip()) < 5:
         raise HTTPException(status_code=422, detail="Question text is too short")
     subject = detect_subject(body.question_text, body.subject)
+    
+    user_context = body.user_context
+    if not user_context and current_user:
+        parts = []
+        if current_user.display_name or current_user.full_name:
+            parts.append(f"Student: {current_user.display_name or current_user.full_name}")
+        if current_user.class_or_year:
+            parts.append(f"Grade/Level: {current_user.class_or_year}")
+        if current_user.education_type:
+            parts.append(f"Exam: {current_user.education_type}")
+        if current_user.primary_subject:
+            parts.append(f"Subject: {current_user.primary_subject}")
+        user_context = " | ".join(parts)
+
     steps, final_answer, key_concepts, related_topics, question_type, confidence, confidence_label = solve_doubt_intelligently(
-        body.question_text, body.subject, body.follow_up_action, body.chat_history
+        body.question_text, body.subject, body.follow_up_action, body.chat_history, user_context=user_context
     )
     doubt_id = str(uuid.uuid4())
     try:

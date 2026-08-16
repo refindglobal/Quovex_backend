@@ -942,57 +942,212 @@ def solve_doubt_from_image(
 
 
 
+def _pick_groq_key() -> str:
+    keys = [k.strip() for k in (settings.GROQ_API_KEYS or settings.GROQ_API_KEY).split(",") if k.strip()]
+    if keys:
+        import random
+        return random.choice(keys)
+    return settings.GROQ_API_KEY
+
+
+def _pick_cerebras_key() -> str:
+    keys = [k.strip() for k in (settings.CEREBRAS_API_KEYS or settings.CEREBRAS_API_KEY).split(",") if k.strip()]
+    if keys:
+        import random
+        return random.choice(keys)
+    return settings.CEREBRAS_API_KEY
+
+
+def perform_live_web_search(query: str, max_results: int = 4) -> str:
+    """Fetch live web snippets for up-to-date factual accuracy."""
+    try:
+        from ddgs import DDGS
+        results = list(DDGS().text(query, max_results=max_results))
+        if not results:
+            return ""
+        snippets = []
+        for r in results:
+            title = r.get("title", "")
+            body = r.get("body", "")
+            if body:
+                snippets.append(f"Source: {title}\nInfo: {body}")
+        return "\n\n".join(snippets)
+    except Exception as e:
+        return ""
+
+
 def _clean_text(s: str) -> str:
     if not s:
         return ""
-    # Strip LaTeX commands and convert to plain readable text
+    # Strip LaTeX commands and convert to clean readable Unicode text
     s = re.sub(r"\\frac\{([^}]+)\}\{([^}]+)\}", r"(\1 / \2)", s)
-    s = re.sub(r"\\sqrt\{([^}]+)\}", r"sqrt(\1)", s)
+    s = re.sub(r"\\sqrt\{([^}]+)\}", r"√(\1)", s)
     s = re.sub(r"\\text\{([^}]+)\}", r"\1", s)
     s = re.sub(r"\\mathbf\{([^}]+)\}", r"\1", s)
     s = re.sub(r"\\math[a-zA-Z]+\{([^}]+)\}", r"\1", s)
     s = s.replace(r"\(", "").replace(r"\)", "").replace(r"\[", "").replace(r"\]", "")
-    s = s.replace(r"\pm", "+/-").replace(r"\times", " * ").replace(r"\cdot", " * ")
-    s = s.replace(r"\le", "<=").replace(r"\ge", ">=").replace(r"\neq", "!=")
-    
-    # Normalize unicode math and typography symbols
-    repl = {
-        "π": "pi", "θ": "theta", "λ": "lambda", "α": "alpha", "β": "beta",
-        "×": " * ", "²": "^2", "³": "^3", "⁴": "^4", "⁻": "^-", "₀": "_0",
-        "₁": "_1", "₂": "_2", "ε": "epsilon", "μ": "mu", "Ω": " Ohm",
-        "√": "sqrt", "½": "1/2", "—": " -- ", "–": " - ", "‑": "-",
-        "±": "+/-", "≠": "!=", "∫": "integral ", "∂": "d", "≤": "<=", "≥": ">="
-    }
-    for k, v in repl.items():
-        s = s.replace(k, v)
+    s = s.replace(r"\pm", "±").replace(r"\times", " × ").replace(r"\cdot", " · ")
+    s = s.replace(r"\le", "≤").replace(r"\ge", "≥").replace(r"\neq", "≠")
+    s = s.replace(r"\theta", "θ").replace(r"\alpha", "α").replace(r"\beta", "β").replace(r"\pi", "π").replace(r"\int", "∫")
+    s = s.replace(r"\\", "")
     return s.strip()
 
 
-def _parse_llm_json(content: str) -> Optional[Tuple[List[DoubtStepOut], str, List[str], List[str]]]:
-    try:
-        start = content.find("{")
-        end = content.rfind("}") + 1
-        if start == -1 or end <= 0:
-            return None
-        data = json.loads(content[start:end])
-        raw_steps = data.get("steps", [])
-        steps = []
-        for i, s in enumerate(raw_steps, start=1):
-            if isinstance(s, dict):
-                steps.append(
-                    DoubtStepOut(
-                        step=s.get("step", i),
-                        title=_clean_text(str(s.get("title", f"Step {i}"))),
-                        content=_clean_text(str(s.get("content", "")))
-                    )
+def _call_llm_for_doubt(
+    question_text: str,
+    subject: str,
+    question_type: str,
+    follow_up_action: Optional[str] = None,
+    chat_history: Optional[List[Any]] = None,
+    user_context: Optional[str] = None
+) -> Optional[Tuple[List[DoubtStepOut], str, List[str], List[str], str, str]]:
+    # 1. Determine if web search is helpful
+    search_context = ""
+    q_low = question_text.lower()
+    needs_search = any(k in q_low for k in [
+        "who is", "current", "2026", "2025", "minister", "president", "capital", "winner",
+        "latest", "today", "news", "discovery", "ceo", "governor", "ranking", "olympics", "who",
+        "chief minister", "prime minister", "cabinet"
+    ]) or question_type == "factual"
+
+    if needs_search:
+        search_query = question_text
+        if "2026" not in search_query and any(k in q_low for k in ["minister", "president", "current", "who is"]):
+            search_query += " 2026"
+        search_context = perform_live_web_search(search_query)
+
+    # 2. Build prompt
+    sys_prompt = (
+        "You are Quovex AI, an elite, patient, empathetic, and ultra-accurate academic AI tutor.\n"
+        "Your mission is to help students learn and master concepts with complete clarity and confidence.\n\n"
+        "Output Rules:\n"
+        "1. Return ONLY a single valid JSON object.\n"
+        "2. JSON Schema:\n"
+        "{\n"
+        '  "question_type": "factual | numerical | conceptual | diagram | teach_me",\n'
+        '  "confidence": "high | medium",\n'
+        '  "confidence_label": "Textbook verified | Live search verified | Step-by-step calculation",\n'
+        '  "steps": [\n'
+        '    {"step": 1, "title": "Step title", "content": "Clear, friendly explanation"},\n'
+        '    {"step": 2, "title": "Step title", "content": "..."}\n'
+        "  ],\n"
+        '  "final_answer": "Concise summary of the answer (1-3 sentences)",\n'
+        '  "key_concepts": ["Key formula or concept 1", "Key concept 2"],\n'
+        '  "related_topics": ["Topic 1", "Topic 2"]\n'
+        "}\n"
+        "3. Readability & Formatting:\n"
+        "   - Use clean, standard textbook English.\n"
+        "   - Use clean Unicode math & chemical symbols (e.g. x², √x, π, θ, Δ, CO₂, H₂SO₄, ∫, 1/2) instead of raw LaTeX tags.\n"
+        "   - If a diagram/visual layout is requested (e.g. circuit, ray optics, cell, flowchart), render a clean ASCII/Unicode diagram block with clear labels inside the step content.\n"
+        "   - Tailor explanation depth and tone to the student's grade/exam level."
+    )
+
+    user_parts = [f"Question: {question_text}", f"Subject: {subject}"]
+    if user_context:
+        user_parts.append(f"Student Context: {user_context}")
+    if follow_up_action:
+        user_parts.append(f"Follow-up Request: {follow_up_action}")
+    if chat_history:
+        hist_text = []
+        for msg in chat_history[-4:]:
+            role = getattr(msg, "role", "user") if hasattr(msg, "role") else (msg.get("role") if isinstance(msg, dict) else "user")
+            content = getattr(msg, "content", "") if hasattr(msg, "content") else (msg.get("content") if isinstance(msg, dict) else str(msg))
+            hist_text.append(f"{role.capitalize()}: {content}")
+        if hist_text:
+            user_parts.append(f"Previous Chat History:\n" + "\n".join(hist_text))
+    if search_context:
+        user_parts.append(f"Live Web Search Information (as of 2026):\n{search_context}")
+
+    user_prompt = "\n\n".join(user_parts)
+
+    # 3. Call Groq first (high-speed)
+    groq_key = _pick_groq_key()
+    if groq_key:
+        try:
+            with httpx.Client(timeout=25) as client:
+                resp = client.post(
+                    "https://api.groq.com/openai/v1/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {groq_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "model": settings.GROQ_MODEL,
+                        "messages": [
+                            {"role": "system", "content": sys_prompt},
+                            {"role": "user", "content": user_prompt},
+                        ],
+                        "temperature": 0.3,
+                        "max_tokens": 2048,
+                    },
                 )
-        final_ans = _clean_text(str(data.get("final_answer", "")))
-        key_concepts = [_clean_text(str(k)) for k in data.get("key_concepts", []) if str(k).strip()]
-        related_topics = [_clean_text(str(t)) for t in data.get("related_topics", []) if str(t).strip()]
-        if final_ans:
-            return steps, final_ans, key_concepts, related_topics
-    except Exception:
-        pass
+                if resp.status_code == 200:
+                    raw_json = resp.json()["choices"][0]["message"]["content"]
+                    s_idx = raw_json.find("{")
+                    e_idx = raw_json.rfind("}") + 1
+                    if s_idx != -1 and e_idx > 0:
+                        data = json.loads(raw_json[s_idx:e_idx], strict=False)
+                        steps = [
+                            DoubtStepOut(
+                                step=s.get("step", i),
+                                title=_clean_text(str(s.get("title", f"Step {i}"))),
+                                content=_clean_text(str(s.get("content", "")))
+                            )
+                            for i, s in enumerate(data.get("steps", []), start=1)
+                        ]
+                        final_ans = _clean_text(str(data.get("final_answer", "")))
+                        key_concepts = [_clean_text(str(k)) for k in data.get("key_concepts", []) if str(k).strip()]
+                        related_topics = [_clean_text(str(t)) for t in data.get("related_topics", []) if str(t).strip()]
+                        q_type = data.get("question_type", question_type)
+                        conf_label = data.get("confidence_label", "Live search verified" if search_context else "Textbook verified")
+                        return steps, final_ans, key_concepts, related_topics, q_type, conf_label
+        except Exception:
+            pass
+
+    # 4. Fallback to Cerebras
+    cerebras_key = _pick_cerebras_key()
+    if cerebras_key:
+        try:
+            with httpx.Client(timeout=25) as client:
+                resp = client.post(
+                    "https://api.cerebras.ai/v1/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {cerebras_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "model": settings.CEREBRAS_MODEL,
+                        "messages": [
+                            {"role": "system", "content": sys_prompt},
+                            {"role": "user", "content": user_prompt},
+                        ],
+                        "temperature": 0.3,
+                        "max_tokens": 2048,
+                    },
+                )
+                if resp.status_code == 200:
+                    raw_json = resp.json()["choices"][0]["message"]["content"]
+                    s_idx = raw_json.find("{")
+                    e_idx = raw_json.rfind("}") + 1
+                    if s_idx != -1 and e_idx > 0:
+                        data = json.loads(raw_json[s_idx:e_idx], strict=False)
+                        steps = [
+                            DoubtStepOut(
+                                step=s.get("step", i),
+                                title=_clean_text(str(s.get("title", f"Step {i}"))),
+                                content=_clean_text(str(s.get("content", "")))
+                            )
+                            for i, s in enumerate(data.get("steps", []), start=1)
+                        ]
+                        final_ans = _clean_text(str(data.get("final_answer", "")))
+                        key_concepts = [_clean_text(str(k)) for k in data.get("key_concepts", []) if str(k).strip()]
+                        related_topics = [_clean_text(str(t)) for t in data.get("related_topics", []) if str(t).strip()]
+                        q_type = data.get("question_type", question_type)
+                        conf_label = data.get("confidence_label", "Verified solution")
+                        return steps, final_ans, key_concepts, related_topics, q_type, conf_label
+        except Exception:
+            pass
+
     return None
 
 
@@ -1004,12 +1159,13 @@ def solve_doubt_intelligently(
     question_text: str,
     subject_hint: str = "",
     follow_up_action: Optional[str] = None,
-    chat_history: Optional[List[Any]] = None
+    chat_history: Optional[List[Any]] = None,
+    user_context: Optional[str] = None
 ) -> Tuple[List[DoubtStepOut], str, List[str], List[str], str, str, str]:
     """
     Returns:
         (steps, final_answer, key_concepts, related_topics, question_type, confidence, confidence_label)
-    All text is plain human-readable English  --  no LaTeX, no markdown symbols.
+    All text is plain human-readable English  --  no raw unrendered LaTeX tags.
     """
     q_low = question_text.lower().strip()
     numbers = extract_numbers(question_text)
@@ -1017,11 +1173,13 @@ def solve_doubt_intelligently(
     question_type = classify_question_type(question_text)
     confidence, confidence_label = classify_confidence(question_type)
 
-    # 1. Try Live AI Engine (Cerebras -> Groq Fallback with full chat history)
-    llm_result = _call_llm_for_doubt(question_text, subject, question_type, follow_up_action, chat_history)
+    # 1. Try Live AI Engine (with live web search & user context)
+    llm_result = _call_llm_for_doubt(
+        question_text, subject, question_type, follow_up_action, chat_history, user_context=user_context
+    )
     if llm_result:
-        steps, final_answer, key_concepts, related_topics = llm_result
-        return steps, final_answer, key_concepts, related_topics, question_type, "high", "AI Tutor Verified"
+        steps, final_answer, key_concepts, related_topics, q_type, conf_label = llm_result
+        return steps, final_answer, key_concepts, related_topics, q_type, "high", conf_label
 
     result = None
 

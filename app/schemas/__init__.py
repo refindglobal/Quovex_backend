@@ -823,6 +823,7 @@ class DoubtSolveIn(BaseModel):
     image_base64: Optional[str] = None   # base64 of photo from OCR camera
     follow_up_action: Optional[str] = None  # "simplify" | "example" | "derive" | "quiz_me"
     chat_history: Optional[list[ChatMessageIn]] = None
+    user_context: Optional[str] = None
 
 
 class DoubtStepOut(BaseModel):
