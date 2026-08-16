@@ -14,7 +14,7 @@ import re
 import math
 import json
 import httpx
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Any
 from app.config import settings
 from app.schemas import DoubtStepOut
 
@@ -727,7 +727,8 @@ def _call_llm_for_doubt(
     question: str,
     subject: str,
     question_type: str,
-    follow_up: Optional[str] = None
+    follow_up: Optional[str] = None,
+    chat_history: Optional[List[Any]] = None
 ) -> Optional[Tuple[List[DoubtStepOut], str, List[str], List[str]]]:
     """
     Calls Cerebras API first, with automatic fallback to Groq API.
@@ -736,6 +737,7 @@ def _call_llm_for_doubt(
     system_prompt = (
         "You are an expert pedagogical AI tutor for students preparing for high school and competitive exams (CBSE, JEE, NEET). "
         "Explain concepts clearly, accurately, and step by step. "
+        "Maintain full conversational context from previous messages if this is a follow-up or clarification question. "
         "CRITICAL FORMAT RULES:\n"
         "1. Write 100% in plain English. NEVER use LaTeX syntax (e.g. no $, no \\frac, no \\text, no \\vec).\n"
         "2. Write math equations simply, like 'F = m * a', 'c = 3.00 x 10^8 m/s', 'v = u + a * t'.\n"
@@ -746,9 +748,25 @@ def _call_llm_for_doubt(
         "   - 'related_topics': array of strings\n"
     )
 
+    messages = [{"role": "system", "content": system_prompt}]
+    
+    if chat_history:
+        for msg in chat_history:
+            if isinstance(msg, dict):
+                r = msg.get("role", "user")
+                c = msg.get("content", "")
+            else:
+                r = getattr(msg, "role", "user")
+                c = getattr(msg, "content", "")
+            if c and str(c).strip():
+                mapped_role = "assistant" if str(r).lower() in ("assistant", "ai", "model") else "user"
+                messages.append({"role": mapped_role, "content": str(c).strip()})
+
     user_prompt = f"Subject: {subject}\nQuestion: {question}"
     if follow_up:
         user_prompt += f"\nFollow-up request: {follow_up}"
+
+    messages.append({"role": "user", "content": user_prompt})
 
     # 1. Try Cerebras
     cerebras_keys = [k.strip() for k in (settings.CEREBRAS_API_KEYS or settings.CEREBRAS_API_KEY).split(",") if k.strip()]
@@ -759,10 +777,7 @@ def _call_llm_for_doubt(
                 headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
                 json={
                     "model": settings.CEREBRAS_MODEL,
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt}
-                    ],
+                    "messages": messages,
                     "temperature": 0.3,
                     "max_tokens": 2048,
                 },
@@ -785,10 +800,7 @@ def _call_llm_for_doubt(
                 headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
                 json={
                     "model": settings.GROQ_MODEL,
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt}
-                    ],
+                    "messages": messages,
                     "temperature": 0.3,
                     "max_tokens": 2048,
                     "response_format": {"type": "json_object"}
@@ -859,7 +871,8 @@ def _parse_llm_json(content: str) -> Optional[Tuple[List[DoubtStepOut], str, Lis
 def solve_doubt_intelligently(
     question_text: str,
     subject_hint: str = "",
-    follow_up_action: Optional[str] = None
+    follow_up_action: Optional[str] = None,
+    chat_history: Optional[List[Any]] = None
 ) -> Tuple[List[DoubtStepOut], str, List[str], List[str], str, str, str]:
     """
     Returns:
@@ -872,8 +885,8 @@ def solve_doubt_intelligently(
     question_type = classify_question_type(question_text)
     confidence, confidence_label = classify_confidence(question_type)
 
-    # 1. Try Live AI Engine (Cerebras -> Groq Fallback)
-    llm_result = _call_llm_for_doubt(question_text, subject, question_type, follow_up_action)
+    # 1. Try Live AI Engine (Cerebras -> Groq Fallback with full chat history)
+    llm_result = _call_llm_for_doubt(question_text, subject, question_type, follow_up_action, chat_history)
     if llm_result:
         steps, final_answer, key_concepts, related_topics = llm_result
         return steps, final_answer, key_concepts, related_topics, question_type, "high", "AI Tutor Verified"

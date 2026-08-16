@@ -812,11 +812,17 @@ class GradeSubjectOut(BaseModel):
 
 # ─── AI Doubt Solver ──────────────────────────────────────────────────────────
 
+class ChatMessageIn(BaseModel):
+    role: str   # "user" | "assistant"
+    content: str
+
+
 class DoubtSolveIn(BaseModel):
     question_text: str
     subject: Optional[str] = "General"
     image_base64: Optional[str] = None   # base64 of photo from OCR camera
     follow_up_action: Optional[str] = None  # "simplify" | "example" | "derive" | "quiz_me"
+    chat_history: Optional[list[ChatMessageIn]] = None
 
 
 class DoubtStepOut(BaseModel):
