@@ -408,6 +408,28 @@ class SubjectProgressOut(BaseModel):
     questions_answered: int = 0
 
 
+class TopicQuizIn(BaseModel):
+    topic: str
+    subject: Optional[str] = None
+    exam_tag: Optional[str] = None
+    question_count: int = 5
+    difficulty: Optional[str] = "adaptive"
+
+
+class TopicQuizOut(BaseModel):
+    quiz_id: str
+    questions: list[QuizQuestionOut]
+    topic: str
+    generated_at: str
+
+
+class DailyQuizOut(BaseModel):
+    quiz_id: str
+    questions: list[QuizQuestionOut]
+    date: str
+    expires_at: str
+
+
 # ─── Topics ────────────────────────────────────────────────────────────────────
 
 class TopicOut(BaseModel):

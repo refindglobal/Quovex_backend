@@ -1,19 +1,19 @@
 """Quiz router - adaptive quiz sessions, scoring, ad mechanics."""
 import logging
-from datetime import datetime, timezone
-from uuid import UUID
+from datetime import datetime, timezone, timedelta
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session as DBSession
 
 from app.core.security import get_current_user
 from app.db.session import get_db
-from app.models import User, UserSubjectProficiency, UserTopicProgress, Topic, QuizQuestion, QuizSession, QuizAnswer
+from app.models import User, UserSubjectProficiency, UserTopicProgress, Topic, QuizQuestion, QuizSession, QuizAnswer, QuestionStatus, Difficulty
 from app.schemas import (
     QuizStartIn, QuizStartOut, QuizQuestionOut,
     QuizAnswerIn, QuizAnswerOut,
     QuizCompleteOut, QuizAdDoubleIn, QuizAdDoubleOut,
-    SubjectProgressOut,
+    SubjectProgressOut, TopicQuizIn, TopicQuizOut, DailyQuizOut,
 )
 from app.services.quiz_service import (
     select_questions, check_answer, count_consecutive_correct,
@@ -275,3 +275,112 @@ async def get_subject_progress(
         )
         for p in proficiencies
     ]
+
+
+@router.get("/daily", response_model=DailyQuizOut)
+async def get_daily_quiz(
+    current_user: User = Depends(get_current_user),
+    db: DBSession = Depends(get_db),
+):
+    """Get the daily quiz for user's primary subject and exam target."""
+    subject = current_user.primary_subject or "Physics"
+    exam_tag = current_user.exam_target or "General Study"
+    grade_or_tag = current_user.class_or_year or exam_tag
+
+    questions = select_questions(
+        db, current_user, subject, exam_tag, "adaptive", 5, grade_or_tag
+    )
+    if not questions:
+        try:
+            from app.tasks.question_generation import _call_cerebras, _pick_api_key
+            api_key = _pick_api_key()
+            raw_qs = _call_cerebras(api_key, subject, exam_tag, "medium", 5)
+            for q_data in raw_qs:
+                if q_data.get("text") and q_data.get("correct_answer"):
+                    q_obj = QuizQuestion(
+                        text=q_data.get("text", ""),
+                        options=q_data.get("options", []),
+                        correct_answer=q_data.get("correct_answer", ""),
+                        explanation=q_data.get("explanation"),
+                        question_type="mcq",
+                        subject=subject,
+                        exam_tag=exam_tag,
+                        grade_or_tag=grade_or_tag,
+                        difficulty=Difficulty.medium,
+                        status=QuestionStatus.live,
+                        generated_at=datetime.now(timezone.utc),
+                    )
+                    db.add(q_obj)
+            db.commit()
+            questions = select_questions(
+                db, current_user, subject, exam_tag, "adaptive", 5, grade_or_tag
+            )
+        except Exception as e:
+            logger.warning(f"Failed to generate daily quiz: {e}")
+
+    now = datetime.now(timezone.utc)
+    return DailyQuizOut(
+        quiz_id=str(uuid4()),
+        questions=[QuizQuestionOut.model_validate(q) for q in questions],
+        date=now.strftime("%Y-%m-%d"),
+        expires_at=(now + timedelta(days=1)).isoformat(),
+    )
+
+
+@router.post("/topic", response_model=TopicQuizOut)
+async def generate_topic_quiz(
+    body: TopicQuizIn,
+    current_user: User = Depends(get_current_user),
+    db: DBSession = Depends(get_db),
+):
+    """Generate on-demand quiz questions for a specific topic."""
+    subject = body.subject or current_user.primary_subject or "Physics"
+    exam_tag = body.exam_tag or current_user.exam_target or "General Study"
+    grade_or_tag = current_user.class_or_year or exam_tag
+    count = body.question_count or 5
+    diff_val = (body.difficulty or "medium").lower()
+    if diff_val not in ("easy", "medium", "hard"):
+        diff_val = "medium"
+
+    # Query DB or generate fresh questions
+    questions = select_questions(
+        db, current_user, subject, exam_tag, diff_val, count, grade_or_tag
+    )
+    if not questions or len(questions) < count:
+        try:
+            from app.tasks.question_generation import _call_cerebras, _pick_api_key
+            api_key = _pick_api_key()
+            # Include topic in generation
+            topic_subject = f"{subject} - {body.topic}"
+            raw_qs = _call_cerebras(api_key, topic_subject, exam_tag, diff_val, count)
+            for q_data in raw_qs:
+                if q_data.get("text") and q_data.get("correct_answer"):
+                    q_obj = QuizQuestion(
+                        text=q_data.get("text", ""),
+                        options=q_data.get("options", []),
+                        correct_answer=q_data.get("correct_answer", ""),
+                        explanation=q_data.get("explanation"),
+                        question_type="mcq",
+                        subject=subject,
+                        exam_tag=exam_tag,
+                        grade_or_tag=grade_or_tag,
+                        difficulty=Difficulty[diff_val],
+                        status=QuestionStatus.live,
+                        generated_at=datetime.now(timezone.utc),
+                    )
+                    db.add(q_obj)
+            db.commit()
+            questions = select_questions(
+                db, current_user, subject, exam_tag, diff_val, count, grade_or_tag
+            )
+        except Exception as e:
+            logger.warning(f"Failed to generate topic quiz: {e}")
+
+    now = datetime.now(timezone.utc)
+    return TopicQuizOut(
+        quiz_id=str(uuid4()),
+        questions=[QuizQuestionOut.model_validate(q) for q in questions],
+        topic=body.topic,
+        generated_at=now.isoformat(),
+    )
+
