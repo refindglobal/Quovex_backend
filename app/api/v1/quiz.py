@@ -293,8 +293,25 @@ async def get_daily_quiz(
     if not questions:
         try:
             from app.tasks.question_generation import _call_cerebras, _pick_api_key
+            from app.models import UserSubjectProficiency
             api_key = _pick_api_key()
-            raw_qs = _call_cerebras(api_key, subject, exam_tag, "medium", 5)
+            # Layer 2 FIX: use adaptive difficulty for AI generation too
+            prof = (
+                db.query(UserSubjectProficiency)
+                .filter(
+                    UserSubjectProficiency.user_id == current_user.id,
+                    UserSubjectProficiency.subject == subject,
+                )
+                .first()
+            )
+            accuracy = prof.rolling_accuracy_score if prof else 0.5
+            if accuracy < 0.4:
+                gen_diff = "easy"
+            elif accuracy < 0.7:
+                gen_diff = "medium"
+            else:
+                gen_diff = "hard"
+            raw_qs = _call_cerebras(api_key, subject, exam_tag, gen_diff, 5)
             for q_data in raw_qs:
                 if q_data.get("text") and q_data.get("correct_answer"):
                     q_obj = QuizQuestion(
@@ -306,7 +323,7 @@ async def get_daily_quiz(
                         subject=subject,
                         exam_tag=exam_tag,
                         grade_or_tag=grade_or_tag,
-                        difficulty=Difficulty.medium,
+                        difficulty=Difficulty[gen_diff],
                         status=QuestionStatus.live,
                         generated_at=datetime.now(timezone.utc),
                     )
@@ -317,6 +334,7 @@ async def get_daily_quiz(
             )
         except Exception as e:
             logger.warning(f"Failed to generate daily quiz: {e}")
+
 
     now = datetime.now(timezone.utc)
     return DailyQuizOut(
@@ -338,11 +356,30 @@ async def generate_topic_quiz(
     exam_tag = body.exam_tag or current_user.exam_target or "General Study"
     grade_or_tag = current_user.class_or_year or exam_tag
     count = body.question_count or 5
-    diff_val = (body.difficulty or "medium").lower()
-    if diff_val not in ("easy", "medium", "hard"):
-        diff_val = "medium"
 
-    # Query DB or generate fresh questions
+    # Layer 2 FIX: resolve difficulty adaptively from user proficiency
+    diff_requested = (body.difficulty or "adaptive").lower()
+    if diff_requested == "adaptive":
+        from app.models import UserSubjectProficiency
+        prof = (
+            db.query(UserSubjectProficiency)
+            .filter(
+                UserSubjectProficiency.user_id == current_user.id,
+                UserSubjectProficiency.subject == subject,
+            )
+            .first()
+        )
+        accuracy = prof.rolling_accuracy_score if prof else 0.5
+        if accuracy < 0.4:
+            diff_val = "easy"
+        elif accuracy < 0.7:
+            diff_val = "medium"
+        else:
+            diff_val = "hard"
+    else:
+        diff_val = diff_requested if diff_requested in ("easy", "medium", "hard") else "medium"
+
+    # Layer 1 FIX: select questions filtered by grade AND subject
     questions = select_questions(
         db, current_user, subject, exam_tag, diff_val, count, grade_or_tag
     )
@@ -350,7 +387,7 @@ async def generate_topic_quiz(
         try:
             from app.tasks.question_generation import _call_cerebras, _pick_api_key
             api_key = _pick_api_key()
-            # Include topic in generation
+            # Include topic in generation for specificity
             topic_subject = f"{subject} - {body.topic}"
             raw_qs = _call_cerebras(api_key, topic_subject, exam_tag, diff_val, count)
             for q_data in raw_qs:
@@ -363,13 +400,14 @@ async def generate_topic_quiz(
                         question_type="mcq",
                         subject=subject,
                         exam_tag=exam_tag,
-                        grade_or_tag=grade_or_tag,
+                        grade_or_tag=grade_or_tag,  # Layer 1 FIX: tag generated questions with user's grade
                         difficulty=Difficulty[diff_val],
                         status=QuestionStatus.live,
                         generated_at=datetime.now(timezone.utc),
                     )
                     db.add(q_obj)
             db.commit()
+            # Re-select with full grade filter now that questions are stored
             questions = select_questions(
                 db, current_user, subject, exam_tag, diff_val, count, grade_or_tag
             )

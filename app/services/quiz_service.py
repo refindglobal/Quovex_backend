@@ -81,6 +81,7 @@ def select_questions(
     if len(unseen) >= count:
         return unseen[:count]
 
+    # Fallback 1: allow previously-seen questions but keep grade/subject filter
     fallback = (
         db.query(QuizQuestion)
         .filter(QuizQuestion.status == QuestionStatus.live)
@@ -96,9 +97,23 @@ def select_questions(
 
     fallback_questions = fallback.limit(count * 5).all()
     random.shuffle(fallback_questions)
-
     combined = unseen + [q for q in fallback_questions if q not in unseen]
-    return combined[:count]
+    if combined:
+        return combined[:count]
+
+    # Fallback 2: subject-only match (ignore grade) — ensures something is returned
+    # This is safe because the question will still be from the correct subject
+    last_resort = (
+        db.query(QuizQuestion)
+        .filter(
+            QuizQuestion.status == QuestionStatus.live,
+            QuizQuestion.subject == subject,
+        )
+        .limit(count * 3)
+        .all()
+    ) if subject else []
+    random.shuffle(last_resort)
+    return last_resort[:count]
 
 
 def check_answer(question: QuizQuestion, selected: Optional[str]) -> bool:
