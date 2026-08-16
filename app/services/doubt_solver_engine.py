@@ -73,6 +73,13 @@ def classify_question_type(question: str) -> str:
     """
     low = question.lower().strip()
 
+    # Diagram / Schematic / Visual: "draw diagram", "ray diagram", "circuit schematic", "flowchart", "graph"
+    diagram_triggers = ["draw", "diagram", "schematic", "sketch", "ray diagram", "circuit",
+                        "flowchart", "graph of", "plot", "visualize", "structure of", "pin diagram",
+                        "block diagram", "waveform", "truth table"]
+    if any(t in low for t in diagram_triggers):
+        return "diagram"
+
     # Teach Me: "teach me X", "explain X", "what is X in detail", "lesson on X"
     teach_triggers = ["teach me", "lesson on", "teach about", "guide me", "learn about",
                       "study guide", "overview of", "introduction to", "topic on"]
@@ -103,7 +110,9 @@ def classify_question_type(question: str) -> str:
 
 def classify_confidence(question_type: str) -> Tuple[str, str]:
     """Returns (confidence_level, confidence_label)"""
-    if question_type == "numerical":
+    if question_type == "diagram":
+        return "high", "Visual Diagram & Schematic"
+    elif question_type == "numerical":
         return "high", "Verified calculation"
     elif question_type == "factual":
         return "high", "Textbook verified"
@@ -742,7 +751,8 @@ def _call_llm_for_doubt(
         "You are an elite, pedagogical, multi-disciplinary AI Mentor for students (CBSE, ICSE, JEE, NEET, UPSC, STEM, History, and Humanities). "
         "Provide intelligent, natural, and beautifully formatted explanations tailored to the student's question:\n"
         "- For History, Social Science, and Humanities (e.g. Akbar, Mughal Empire, World War, Geography): Provide a rich, structured, engaging explanation with historical context, key milestones, strategies, and impacts. Do NOT force the answer into artificial numbered step cards.\n"
-        "- For Diagrams / Schematics (e.g. 'draw a diagram', 'circuit schematic', 'ray diagram'): Provide a clean ASCII/Unicode diagram with labeled parts and clear explanations.\n"
+        "- For Diagrams, Schematics & Visuals (e.g. 'draw diagram', 'ray diagram', 'circuit diagram', 'flowchart', 'cell diagram', 'graph', 'schematic'):\n"
+        "  You MUST include a clean, beautifully aligned visual ASCII/Unicode diagram enclosed inside a markdown code block (```diagram\\n...\\n```) using precision box-drawing and schematic symbols (─ │ ┌ ┐ └ ┘ ├ ┤ ┬ ┴ ┼ ► ◄ ▲ ▼ ○ ● ⚡ ⊕ ⊖ ──[ R ]── ──( A )── ──| |── ──[ S ]──). Follow it with labeled component explanations, ray tracing/working principle, and key formula.\n"
         "- For Mathematics, Physics, and Chemistry numericals/derivations: Provide complete, accurate algebraic calculations and steps.\n\n"
         "CRITICAL FORMAT RULES:\n"
         "1. Write in clean, plain readable text with natural paragraphs and bullet points. Use standard math symbols (+, -, *, /, ^).\n"
@@ -836,18 +846,13 @@ def _clean_text(s: str) -> str:
     s = s.replace(r"\pm", "+/-").replace(r"\times", " * ").replace(r"\cdot", " * ")
     s = s.replace(r"\le", "<=").replace(r"\ge", ">=").replace(r"\neq", "!=")
     
-    # Strip markdown bold tags without stripping math multiplication
-    s = re.sub(r"\*\*([^*]+)\*\*", r"\1", s)
-    s = s.replace("**", "").replace("`", "")
-    
     # Normalize unicode math and typography symbols
     repl = {
         "π": "pi", "θ": "theta", "λ": "lambda", "α": "alpha", "β": "beta",
         "×": " * ", "²": "^2", "³": "^3", "⁴": "^4", "⁻": "^-", "₀": "_0",
         "₁": "_1", "₂": "_2", "ε": "epsilon", "μ": "mu", "Ω": " Ohm",
-        "√": "sqrt", "½": "1/2", "—": " -- ", "–": " - ", "‑": "-", "→": " -> ",
-        "↑": " increases ", "↓": " decreases ", "±": "+/-", "≠": "!=",
-        "∫": "integral ", "∂": "d", "≤": "<=", "≥": ">="
+        "√": "sqrt", "½": "1/2", "—": " -- ", "–": " - ", "‑": "-",
+        "±": "+/-", "≠": "!=", "∫": "integral ", "∂": "d", "≤": "<=", "≥": ">="
     }
     for k, v in repl.items():
         s = s.replace(k, v)
