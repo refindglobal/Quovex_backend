@@ -68,9 +68,9 @@ async def start_quiz(
                         correct_answer=q_data.get("correct_answer", ""),
                         explanation=q_data.get("explanation"),
                         question_type=QuestionType.mcq,
-                        subject=subj,
-                        exam_tag=body.exam_tag,
-                        grade_or_tag=grade_or_tag,
+                        subject=subj[:500],
+                        exam_tag=body.exam_tag[:255] if body.exam_tag else None,
+                        grade_or_tag=grade_or_tag[:255] if grade_or_tag else None,
                         difficulty=Difficulty[diff_val],
                         status=QuestionStatus.live,
                         generated_at=datetime.now(timezone.utc),
@@ -82,6 +82,7 @@ async def start_quiz(
                 body.difficulty, body.question_count, grade_or_tag,
             )
         except Exception as e:
+            db.rollback()
             logger.warning(f"On-demand fresh question generation: {e}")
 
     if not questions:
@@ -89,9 +90,9 @@ async def start_quiz(
 
     quiz_session = QuizSession(
         user_id=current_user.id,
-        subject=body.subject,
-        exam_tag=body.exam_tag,
-        grade_or_tag=grade_or_tag,
+        subject=body.subject[:500] if body.subject else None,
+        exam_tag=body.exam_tag[:255] if body.exam_tag else None,
+        grade_or_tag=grade_or_tag[:255] if grade_or_tag else None,
         topic_id=body.topic_id,
         difficulty_mode=body.difficulty,
         question_ids=[q.id for q in questions],
@@ -411,9 +412,9 @@ async def generate_topic_quiz(
                         correct_answer=q_data.get("correct_answer", ""),
                         explanation=q_data.get("explanation"),
                         question_type="mcq",
-                        subject=subject,
-                        exam_tag=exam_tag,
-                        grade_or_tag=grade_or_tag,  # Layer 1 FIX: tag generated questions with user's grade
+                        subject=subject[:500],
+                        exam_tag=exam_tag[:255] if exam_tag else None,
+                        grade_or_tag=grade_or_tag[:255] if grade_or_tag else None,  # Layer 1 FIX: tag generated questions with user's grade
                         difficulty=Difficulty[diff_val],
                         status=QuestionStatus.live,
                         generated_at=datetime.now(timezone.utc),
@@ -425,14 +426,15 @@ async def generate_topic_quiz(
                 db, current_user, subject, exam_tag, diff_val, count, grade_or_tag
             )
         except Exception as e:
+            db.rollback()
             logger.warning(f"Failed to generate topic quiz: {e}")
 
     now = datetime.now(timezone.utc)
     session_obj = QuizSession(
         user_id=current_user.id,
-        subject=subject,
-        exam_tag=exam_tag,
-        grade_or_tag=grade_or_tag,
+        subject=subject[:500] if subject else None,
+        exam_tag=exam_tag[:255] if exam_tag else None,
+        grade_or_tag=grade_or_tag[:255] if grade_or_tag else None,
         difficulty_mode=Difficulty[diff_val],
         question_ids=[str(q.id) for q in questions],
         start_time=now,

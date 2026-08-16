@@ -61,6 +61,23 @@ async def lifespan(app: FastAPI):
         logger.info("Database tables verified/created successfully.")
     except Exception as e:
         logger.warning(f"Database table verification skipped/warning: {e}")
+
+    try:
+        with engine.connect() as conn:
+            if engine.dialect.name == "postgresql":
+                conn.execute(text("ALTER TABLE quiz_questions ALTER COLUMN subject TYPE VARCHAR(500);"))
+                conn.execute(text("ALTER TABLE quiz_questions ALTER COLUMN exam_tag TYPE VARCHAR(255);"))
+                conn.execute(text("ALTER TABLE quiz_questions ALTER COLUMN grade_or_tag TYPE VARCHAR(255);"))
+                conn.execute(text("ALTER TABLE quiz_sessions ALTER COLUMN subject TYPE VARCHAR(500);"))
+                conn.execute(text("ALTER TABLE quiz_sessions ALTER COLUMN exam_tag TYPE VARCHAR(255);"))
+                conn.execute(text("ALTER TABLE quiz_sessions ALTER COLUMN grade_or_tag TYPE VARCHAR(255);"))
+                conn.execute(text("ALTER TABLE topics ALTER COLUMN name TYPE VARCHAR(500);"))
+                conn.execute(text("ALTER TABLE topics ALTER COLUMN subject TYPE VARCHAR(500);"))
+                conn.execute(text("ALTER TABLE doubts ALTER COLUMN subject TYPE VARCHAR(500);"))
+                conn.commit()
+                logger.info("Column expansion migration verified/applied.")
+    except Exception as e:
+        logger.warning(f"Column expansion skipped: {e}")
     yield
     # Shutdown
     await close_redis()

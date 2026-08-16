@@ -310,9 +310,9 @@ class QuizQuestion(Base, TimestampMixin):
     explanation = Column(Text, nullable=True)
 
     question_type = Column(SAEnum(QuestionType), nullable=False, default=QuestionType.mcq)
-    subject = Column(String(100), nullable=False, index=True)
-    exam_tag = Column(String(100), nullable=True, index=True)
-    grade_or_tag = Column(String(100), nullable=True, index=True)
+    subject = Column(String(500), nullable=False, index=True)
+    exam_tag = Column(String(255), nullable=True, index=True)
+    grade_or_tag = Column(String(255), nullable=True, index=True)
     difficulty = Column(SAEnum(Difficulty), nullable=False, default=Difficulty.medium, index=True)
     status = Column(SAEnum(QuestionStatus), nullable=False, default=QuestionStatus.pending_review, index=True)
 
@@ -338,9 +338,9 @@ class QuizSession(Base, TimestampMixin):
     id = Column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(Uuid(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
 
-    subject = Column(String(100), nullable=True)
-    exam_tag = Column(String(100), nullable=True)
-    grade_or_tag = Column(String(100), nullable=True)
+    subject = Column(String(500), nullable=True)
+    exam_tag = Column(String(255), nullable=True)
+    grade_or_tag = Column(String(255), nullable=True)
     topic_id = Column(Uuid(as_uuid=True), ForeignKey("topics.id"), nullable=True)
     difficulty_mode = Column(SAEnum(Difficulty), nullable=False, default=Difficulty.adaptive)
 
@@ -605,9 +605,9 @@ class Topic(Base):
     __tablename__ = "topics"
 
     id = Column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    name = Column(String(100), nullable=False)
-    subject = Column(String(100), nullable=False, index=True)
-    exam_tag = Column(String(100), nullable=True)
+    name = Column(String(500), nullable=False)
+    subject = Column(String(500), nullable=False, index=True)
+    exam_tag = Column(String(255), nullable=True)
     display_order = Column(Integer, default=0, nullable=False)
 
     user_progress = relationship("UserTopicProgress", back_populates="topic", lazy="select")
@@ -636,7 +636,7 @@ class Doubt(Base, TimestampMixin):
     id = Column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(Uuid(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     question_text = Column(Text, nullable=False)
-    subject = Column(String(100), nullable=False, default="General")
+    subject = Column(String(500), nullable=False, default="General")
     image_url = Column(Text, nullable=True)
     # JSON: list of {"step": int, "title": str, "content": str}
     step_by_step_explanation = Column(JSON, default=list, nullable=False)
