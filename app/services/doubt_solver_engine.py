@@ -1039,7 +1039,8 @@ def _call_llm_for_doubt(
         "   - Use clean, standard textbook English.\n"
         "   - Use clean Unicode math & chemical symbols (e.g. x², √x, π, θ, Δ, CO₂, H₂SO₄, ∫, 1/2) instead of raw LaTeX tags.\n"
         "   - If a diagram/visual layout is requested (e.g. circuit, ray optics, cell, flowchart), render a clean ASCII/Unicode diagram block with clear labels inside the step content.\n"
-        "   - Tailor explanation depth and tone to the student's grade/exam level."
+        "   - Tailor explanation depth and tone to the student's grade/exam level.\n"
+        "   - Always answer directly and confidently using the live web search information and verified facts. NEVER mention 'knowledge cutoff', 'as of my training', or disclaimers."
     )
 
     user_parts = [f"Question: {question_text}", f"Subject: {subject}"]
