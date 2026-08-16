@@ -31,11 +31,12 @@ SUBJECT_KEYWORDS = {
         "wavelength", "light", "vacuum", "photon", "quantum", "kinematics", "dynamics"
     ],
     "Mathematics": [
-        "integral", "derivative", "limit", "matrix", "equation", "polynomial", "proof", "theorem",
+        "integral", "derivative", "limit", "matrix", "matrices", "equation", "polynomial", "proof", "theorem",
         "function", "vector", "calculus", "algebra", "quadratic", "roots", "discriminant", "triangle",
-        "circle", "trigonometry", "sin", "cos", "tan", "logarithm", "probability", "permutation",
-        "combination", "determinant", "sequence", "series", "progression", "geometry", "slope",
-        "differentiate", "integrate", "evaluate", "solve", "alpha", "beta"
+        "circle", "trigonometry", "sin", "cos", "tan", "sec", "cosec", "cot", "log", "ln", "logarithm",
+        "probability", "permutation", "combination", "determinant", "sequence", "series", "progression",
+        "geometry", "slope", "differentiate", "integrate", "evaluate", "solve", "factorize", "simplify",
+        "pythagoras", "hypotenuse", "perimeter", "area", "volume", "differential", "dx", "dy", "alpha", "beta"
     ],
     "Chemistry": [
         "element", "compound", "reaction", "mole", "bond", "orbital", "acid", "base", "equilibrium",
@@ -78,12 +79,15 @@ def classify_question_type(question: str) -> str:
     if any(t in low for t in teach_triggers):
         return "teach_me"
 
-    # Numerical: contains numbers, "find", "calculate", "how much", "what is the value"
+    # Numerical / Math Problem: contains numbers, math symbols, calculus, algebra, equations
     has_numbers = bool(re.search(r"\d+", low))
-    calc_triggers = ["find ", "calculate", "compute", "determine the", "how much", "how long",
-                     "what is the value", "what will be", "how fast", "how far", "time taken",
-                     "final velocity", "work done", "distance", "solve for"]
-    if has_numbers and any(t in low for t in calc_triggers):
+    has_math_symbols = bool(re.search(r"(=|\^|\+|\-|\*|\/|\b(sin|cos|tan|log|ln|dx|dy|lim|sqrt|integral|derivative|matrix|matrices)\b)", low))
+    calc_triggers = ["find", "calculate", "compute", "determine", "solve", "evaluate", "simplify",
+                     "differentiate", "integrate", "factorize", "roots", "discriminant", "value of",
+                     "final velocity", "work done", "distance", "time taken", "how much", "how far"]
+    if (has_numbers or has_math_symbols) and any(t in low for t in calc_triggers):
+        return "numerical"
+    if has_math_symbols and ("=" in low or "^" in low or "dx" in low):
         return "numerical"
 
     # Conceptual: "why", "how does", "explain why", "reason for", "what happens when"
@@ -735,15 +739,17 @@ def _call_llm_for_doubt(
     Returns parsed (steps, final_answer, key_concepts, related_topics) or None if both fail.
     """
     system_prompt = (
-        "You are an expert pedagogical AI tutor for students preparing for high school and competitive exams (CBSE, JEE, NEET). "
-        "Explain concepts clearly, accurately, and step by step. "
+        "You are an elite, pedagogical STEM and Mathematics AI Tutor for students preparing for CBSE, JEE Main/Advanced, and NEET. "
+        "You excel at algebra, calculus (derivatives, integrals, limits), trigonometry, coordinate geometry, matrices, probability, and physics numericals. "
+        "Explain concepts and calculations step by step with crystal clarity and rigorous mathematical accuracy. "
         "Maintain full conversational context from previous messages if this is a follow-up or clarification question. "
         "CRITICAL FORMAT RULES:\n"
-        "1. Write 100% in plain English. NEVER use LaTeX syntax (e.g. no $, no \\frac, no \\text, no \\vec).\n"
-        "2. Write math equations simply, like 'F = m * a', 'c = 3.00 x 10^8 m/s', 'v = u + a * t'.\n"
-        "3. Output ONLY a valid JSON object with these exact keys:\n"
+        "1. Write 100% in plain readable text. Use standard arithmetic operators (+, -, *, /, ^, sqrt, integral, dy/dx, lim). Avoid raw LaTeX command tags like \\frac or \\text.\n"
+        "2. For math equations, show every intermediate algebraic manipulation and substitution clearly.\n"
+        "3. Provide the definitive final numerical root or closed-form answer in 'final_answer'.\n"
+        "4. Output ONLY a valid JSON object with these exact keys:\n"
         "   - 'final_answer': string (the direct, definitive, human-readable answer)\n"
-        "   - 'steps': array of objects, each having 'step' (integer), 'title' (string), 'content' (string in plain English)\n"
+        "   - 'steps': array of objects, each having 'step' (integer), 'title' (string), 'content' (string with clear math steps)\n"
         "   - 'key_concepts': array of strings (formulas/constants to remember)\n"
         "   - 'related_topics': array of strings\n"
     )
@@ -778,7 +784,7 @@ def _call_llm_for_doubt(
                 json={
                     "model": settings.CEREBRAS_MODEL,
                     "messages": messages,
-                    "temperature": 0.3,
+                    "temperature": 0.2,
                     "max_tokens": 2048,
                 },
                 timeout=12
@@ -801,7 +807,7 @@ def _call_llm_for_doubt(
                 json={
                     "model": settings.GROQ_MODEL,
                     "messages": messages,
-                    "temperature": 0.3,
+                    "temperature": 0.2,
                     "max_tokens": 2048,
                     "response_format": {"type": "json_object"}
                 },
@@ -821,15 +827,17 @@ def _call_llm_for_doubt(
 def _clean_text(s: str) -> str:
     if not s:
         return ""
-    # Strip markdown bold/italics
-    s = s.replace("**", "").replace("*", "").replace("`", "")
+    # Strip markdown bold tags without stripping math operators
+    s = re.sub(r"\*\*([^*]+)\*\*", r"\1", s)
+    s = s.replace("**", "").replace("`", "")
     # Normalize unicode math symbols
     repl = {
         "π": "pi", "θ": "theta", "λ": "lambda", "α": "alpha", "β": "beta",
-        "×": " x ", "²": "^2", "³": "^3", "⁴": "^4", "⁻": "^-", "₀": "_0",
+        "×": " * ", "²": "^2", "³": "^3", "⁴": "^4", "⁻": "^-", "₀": "_0",
         "₁": "_1", "₂": "_2", "ε": "epsilon", "μ": "mu", "Ω": " Ohm",
         "√": "sqrt", "½": "1/2", "—": " -- ", "–": " - ", "→": " -> ",
-        "↑": " increases ", "↓": " decreases ", "±": "+/-", "≠": "!="
+        "↑": " increases ", "↓": " decreases ", "±": "+/-", "≠": "!=",
+        "∫": "integral ", "∂": "d", "≤": "<=", "≥": ">="
     }
     for k, v in repl.items():
         s = s.replace(k, v)
