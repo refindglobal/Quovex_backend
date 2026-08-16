@@ -35,22 +35,23 @@ def _get_grade_subject_combos() -> list[tuple[str, str]]:
     except Exception:
         return []
 
-GENERATION_PROMPT = """Generate {count} quiz questions for subject: {subject}, exam: {exam_tag}, difficulty: {difficulty}.
+GENERATION_PROMPT = """Generate {count} high-quality, human-readable quiz questions for subject: {subject}, exam: {exam_tag}, difficulty: {difficulty}.
 
 Context: {context_note}
 
 Return ONLY a valid JSON array. Each object must have:
-- "text": question text
-- "options": array of 4 answer strings (for MCQ)
-- "correct_answer": the exact correct answer string
-- "explanation": brief explanation of the correct answer (2-3 sentences)
+- "text": Clear, engaging, and well-written question text
+- "options": Array of exactly 4 distinct, clean answer strings
+- "correct_answer": The exact matching correct answer string from the options array
+- "explanation": Clear, human-friendly explanation explaining WHY the answer is correct (2-3 sentences)
 - "question_type": "mcq"
 
-Rules:
-- Questions must be factually accurate and exam-relevant
-- Options must be plausible distractors
-- No duplicate questions
-- Difficulty {difficulty}: {{easy = recall-based, medium = application, hard = analysis}}
+Formatting & Readability Rules:
+1. Highly readable: Formulate clear, concise questions in standard textbook English.
+2. Clean Math & Science: Use clean Unicode symbols (e.g., x², y³, √x, π, θ, α, β, Δ, CO₂, H₂SO₄, 1/2) instead of raw LaTeX markup like \\frac{{}}{{}} or $...$.
+3. Clean options: Do NOT prefix options with "A)", "B)", "1.", "Option A:". Just provide the clean answer text.
+4. Exact match: "correct_answer" MUST be character-for-character identical to one of the 4 strings in "options".
+5. Factually verified: Every question, answer, and explanation must be 100% factually accurate and relevant to {exam_tag}.
 """
 
 
