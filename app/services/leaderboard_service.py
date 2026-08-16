@@ -11,7 +11,7 @@ from uuid import UUID
 
 import redis.asyncio as aioredis
 from sqlalchemy.orm import Session
-from sqlalchemy import func, desc
+from sqlalchemy import func, desc, or_, String
 
 from app.models import (
     User, Session as StudySession, QuizSession, LeaderboardSnapshot,
@@ -67,7 +67,6 @@ def compute_leaderboard(
                 User.country,
                 User.state,
                 User.streak_count,
-                User.exam_tags,
                 rank_col,
             )
             .join(StudySession, StudySession.user_id == User.id)
@@ -86,7 +85,6 @@ def compute_leaderboard(
                 User.country,
                 User.state,
                 User.streak_count,
-                User.exam_tags,
                 func.coalesce(func.sum(QuizSession.verified_quiz_score_earned), 0).label("score"),
             )
             .outerjoin(
@@ -130,7 +128,6 @@ def compute_leaderboard(
                 User.country,
                 User.state,
                 User.streak_count,
-                User.exam_tags,
                 (
                     func.coalesce(study_score.c.study_score, 0)
                     + func.coalesce(quiz_score.c.quiz_score, 0) * 0.5
@@ -148,13 +145,18 @@ def compute_leaderboard(
 
     # Apply exam_tag filter
     if exam_tag:
-        query = query.filter(User.exam_tags.contains([exam_tag]))
+        query = query.filter(
+            or_(
+                User.exam_target == exam_tag,
+                func.cast(User.exam_tags, String).contains(exam_tag)
+            )
+        )
 
-    # Group by user for aggregate-based tracks
+    # Group by user for aggregate-based tracks (exclude JSON columns like exam_tags)
     if track != LeaderboardTrack.overall:
         query = query.group_by(
             User.id, User.display_name, User.avatar_url,
-            User.country, User.state, User.streak_count, User.exam_tags
+            User.country, User.state, User.streak_count
         )
 
     query = query.filter(User.is_banned == False)
