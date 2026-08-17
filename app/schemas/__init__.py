@@ -830,6 +830,7 @@ class DoubtStepOut(BaseModel):
     step: int
     title: str
     content: str
+    is_html: bool = False   # True when content is SVG/HTML to render in WebView
 
 
 class DoubtSolveOut(BaseModel):

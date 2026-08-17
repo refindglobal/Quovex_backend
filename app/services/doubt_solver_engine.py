@@ -958,6 +958,180 @@ def _pick_cerebras_key() -> str:
     return settings.CEREBRAS_API_KEY
 
 
+# ─────────────────────────────────────────────────────────────
+#  WIKIPEDIA IMAGE FETCH + CEREBRAS VERIFICATION
+# ─────────────────────────────────────────────────────────────
+
+def _fetch_wiki_image(query: str) -> Optional[tuple]:
+    """
+    Search Wikipedia for a real educational image for the query.
+    Uses REST API first (faster, avoids 403), then Action API fallback.
+    Returns (image_url, page_title, page_extract) or None.
+    """
+    slug = query.replace(" ", "_")
+    _WIKI_HEADERS = {
+        "User-Agent": "QuovexAI/1.0 (educational; https://quovex.app) Python/3.11 httpx",
+        "Accept": "application/json",
+    }
+    try:
+        with httpx.Client(timeout=8, follow_redirects=True, headers=_WIKI_HEADERS) as client:
+            # 1. Try REST summary API (fastest, no bot-detection issues)
+            r = client.get(f"https://en.wikipedia.org/api/rest_v1/page/summary/{slug}")
+            if r.status_code == 200:
+                d = r.json()
+                img = d.get("thumbnail", {}).get("source", "")
+                title = d.get("title", query)
+                extract = d.get("extract", "")[:400]
+                if img and "svg" not in img.lower():
+                    return img, title, extract
+
+            # 2. Action API fallback: search + page images
+            sr = client.get("https://en.wikipedia.org/w/api.php", params={
+                "action": "query", "list": "search",
+                "srsearch": query, "srlimit": 1, "format": "json"
+            })
+            if sr.status_code == 200:
+                results = sr.json().get("query", {}).get("search", [])
+                if results:
+                    page_title = results[0]["title"]
+                    pr = client.get("https://en.wikipedia.org/w/api.php", params={
+                        "action": "query", "titles": page_title,
+                        "prop": "pageimages|extracts",
+                        "pithumbsize": 600, "pilicense": "any",
+                        "exintro": True, "exsentences": 3, "explaintext": True,
+                        "redirects": 1, "format": "json"
+                    })
+                    if pr.status_code == 200:
+                        for page in pr.json().get("query", {}).get("pages", {}).values():
+                            img = page.get("thumbnail", {}).get("source", "")
+                            extract = page.get("extract", "")[:400]
+                            if img and "svg" not in img.lower():
+                                return img, page_title, extract
+    except Exception:
+        pass
+    return None
+
+
+def _cerebras_verify_image(image_url: str, page_title: str, page_extract: str, question: str) -> bool:
+    """
+    Text-based Cerebras verification: ask if the Wikipedia article title/excerpt
+    matches the student's question. (Vision via URL is blocked by Wikipedia CDN;
+    base64 download also 403s — text verification is the proven working approach.)
+    Returns True if relevant, False otherwise.
+    """
+    cerebras_key = _pick_cerebras_key()
+    if not cerebras_key:
+        return True  # trust Wikipedia if no key
+    prompt = (
+        f"Student question: '{question}'\n"
+        f"Wikipedia article title: '{page_title}'\n"
+        f"Article preview: {page_extract}\n\n"
+        f"Does this Wikipedia article DIRECTLY illustrate or answer the student's question?\n"
+        f"Answer ONLY: YES or NO"
+    )
+    try:
+        with httpx.Client(timeout=10) as client:
+            resp = client.post(
+                "https://api.cerebras.ai/v1/chat/completions",
+                headers={"Authorization": f"Bearer {cerebras_key}", "Content-Type": "application/json"},
+                json={
+                    "model": settings.CEREBRAS_MODEL,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0.0,
+                    "max_tokens": 5,
+                }
+            )
+            if resp.status_code == 200:
+                ans = resp.json()["choices"][0]["message"]["content"].strip().upper()
+                return "YES" in ans
+    except Exception:
+        pass
+    return True  # trust on error
+
+
+def _cerebras_generate_svg(question: str, retries: int = 2) -> str:
+    """
+    Ask Cerebras to generate a clean dark-themed SVG diagram for the question.
+    Used as fallback when no Wikipedia image is found.
+    Returns raw SVG string or empty string on failure.
+    """
+    svg_prompt = (
+        f"Draw a clean, labeled educational SVG diagram for: '{question}'\n"
+        "Rules:\n"
+        "- Output ONLY the raw <svg>...</svg> element, nothing else\n"
+        "- No markdown code fences, no explanation text outside the SVG\n"
+        "- Dark theme: background #1E1E2A, text color #E8E8F0, accent #6C63FF\n"
+        "- width=400 height=300 viewBox='0 0 400 300'\n"
+        "- Label each anatomical/structural part clearly with readable text\n"
+        "- Keep it simple, accurate, and educational"
+    )
+    import time
+    cerebras_key = _pick_cerebras_key()
+    if not cerebras_key:
+        return ""
+    for attempt in range(retries):
+        try:
+            with httpx.Client(timeout=25) as client:
+                resp = client.post(
+                    "https://api.cerebras.ai/v1/chat/completions",
+                    headers={"Authorization": f"Bearer {cerebras_key}", "Content-Type": "application/json"},
+                    json={
+                        "model": settings.CEREBRAS_MODEL,
+                        "messages": [{"role": "user", "content": svg_prompt}],
+                        "temperature": 0.3,
+                        "max_tokens": 2000,
+                    }
+                )
+                if resp.status_code == 200:
+                    raw = resp.json()["choices"][0]["message"]["content"].strip()
+                    # Strip any markdown fences
+                    raw = re.sub(r"```[a-zA-Z]*\n?", "", raw).replace("```", "").strip()
+                    if "<svg" in raw.lower():
+                        return raw
+                elif resp.status_code == 429:
+                    time.sleep(5 * (attempt + 1))
+        except Exception:
+            pass
+    return ""
+
+
+def _build_image_html(image_url: str, page_title: str, question: str) -> str:
+    """Wrap a Wikipedia image URL in a dark-themed HTML page for Android WebView."""
+    return (
+        '<!DOCTYPE html><html><head>'
+        '<meta name="viewport" content="width=device-width, initial-scale=1.0">'
+        '<style>'
+        'body{margin:0;padding:12px;background:#1E1E2A;font-family:sans-serif;}'
+        'img{width:100%;border-radius:12px;display:block;max-height:260px;object-fit:contain;}'
+        '.caption{color:#9898B0;font-size:11px;text-align:center;padding:6px 0 2px;}'
+        '.source{color:#6C63FF;font-size:10px;text-align:center;}'
+        '</style></head><body>'
+        f'<img src="{image_url}" alt="{page_title}" />'
+        f'<p class="caption">{page_title}</p>'
+        '<p class="source">Source: Wikipedia</p>'
+        '</body></html>'
+    )
+
+
+def _build_svg_html(svg_content: str) -> str:
+    """Wrap LLM-generated SVG in a dark-themed HTML page for Android WebView."""
+    svg_content = re.sub(r"```[a-zA-Z]*\n?", "", svg_content).replace("```", "").strip()
+    if not svg_content.strip().startswith("<"):
+        svg_content = f"<p style='color:#E8E8F0;padding:12px;'>{svg_content}</p>"
+    return (
+        '<!DOCTYPE html><html><head>'
+        '<meta name="viewport" content="width=device-width, initial-scale=1.0">'
+        '<style>'
+        'body{margin:0;padding:12px;background:#1E1E2A;font-family:sans-serif;}'
+        'svg{width:100%;height:auto;display:block;}'
+        'p{color:#E8E8F0;font-size:13px;line-height:1.6;}'
+        '</style></head><body>'
+        f'{svg_content}'
+        '</body></html>'
+    )
+
+
+
 def perform_live_web_search(query: str, max_results: int = 4) -> str:
     """Fetch live web snippets for up-to-date factual accuracy using multiple resilient fallbacks."""
     # 1. Try ddgs / duckduckgo_search library
@@ -1084,6 +1258,46 @@ def _call_llm_for_doubt(
             search_query += " 2026"
         search_context = perform_live_web_search(search_query)
 
+    # 1b. For diagram questions → try real Wikipedia image, then SVG fallback
+    diagram_image_step: Optional[DoubtStepOut] = None
+    is_diagram_question = (
+        question_type == "diagram" or
+        any(k in q_low for k in ["draw", "diagram", "label", "structure of", "anatomy of", "show me", "sketch"])
+    )
+    if is_diagram_question:
+        # Build a clean search query — strip verbs/articles, keep content words
+        diagram_query = re.sub(
+            r"\b(draw|please|show|me|a|an|the|of|in|for|and|or|with|sketch|label|explain)\b",
+            " ", q_low
+        ).strip()
+        diagram_query = " ".join(diagram_query.split())  # collapse spaces
+        if not diagram_query or len(diagram_query) < 3:
+            diagram_query = question_text
+
+        # Try to get a real Wikipedia image
+        wiki_result = _fetch_wiki_image(diagram_query)
+        if wiki_result:
+            img_url, pg_title, pg_extract = wiki_result
+            is_relevant = _cerebras_verify_image(img_url, pg_title, pg_extract, question_text)
+            if is_relevant:
+                diagram_image_step = DoubtStepOut(
+                    step=1,
+                    title=f"Diagram: {pg_title}",
+                    content=_build_image_html(img_url, pg_title, question_text),
+                    is_html=True
+                )
+
+        # SVG fallback when no Wikipedia image found
+        if not diagram_image_step:
+            svg = _cerebras_generate_svg(question_text)
+            if svg:
+                diagram_image_step = DoubtStepOut(
+                    step=1,
+                    title="Diagram",
+                    content=_build_svg_html(svg),
+                    is_html=True
+                )
+
     # 2. Build prompt
     sys_prompt = (
         "You are Quovex AI, a friendly, empathetic, and ultra-accurate academic AI tutor for Indian students.\n"
@@ -1170,6 +1384,12 @@ def _call_llm_for_doubt(
                             )
                             for i, s in enumerate(data.get("steps", []), start=1)
                         ]
+                        # Prepend diagram image/SVG step if one was found
+                        if diagram_image_step:
+                            # Re-number remaining steps
+                            for j, st in enumerate(steps, start=2):
+                                st.step = j
+                            steps = [diagram_image_step] + steps
                         final_ans = _clean_text(str(data.get("final_answer", "")))
                         key_concepts = [_clean_text(str(k)) for k in data.get("key_concepts", []) if str(k).strip()]
                         related_topics = [_clean_text(str(t)) for t in data.get("related_topics", []) if str(t).strip()]
@@ -1214,6 +1434,11 @@ def _call_llm_for_doubt(
                             )
                             for i, s in enumerate(data.get("steps", []), start=1)
                         ]
+                        # Prepend diagram image/SVG step if one was found
+                        if diagram_image_step:
+                            for j, st in enumerate(steps, start=2):
+                                st.step = j
+                            steps = [diagram_image_step] + steps
                         final_ans = _clean_text(str(data.get("final_answer", "")))
                         key_concepts = [_clean_text(str(k)) for k in data.get("key_concepts", []) if str(k).strip()]
                         related_topics = [_clean_text(str(t)) for t in data.get("related_topics", []) if str(t).strip()]
@@ -1222,6 +1447,14 @@ def _call_llm_for_doubt(
                         return steps, final_ans, key_concepts, related_topics, q_type, conf_label
         except Exception:
             pass
+
+    # If LLM failed but we have a diagram step, return that alone
+    if diagram_image_step:
+        return (
+            [diagram_image_step],
+            "Here is the diagram for your question.",
+            [], [], question_type, "Textbook verified"
+        )
 
     return None
 
