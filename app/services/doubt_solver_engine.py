@@ -1045,6 +1045,19 @@ def _clean_text(s: str) -> str:
     s = s.replace(r"\le", "≤").replace(r"\ge", "≥").replace(r"\neq", "≠")
     s = s.replace(r"\theta", "θ").replace(r"\alpha", "α").replace(r"\beta", "β").replace(r"\pi", "π").replace(r"\int", "∫")
     s = s.replace(r"\\", "")
+    # Strip markdown code fences (``` or ``) — Android Text() renders them as literal characters
+    s = re.sub(r"```[a-zA-Z]*\n?", "", s)   # opening ``` with optional language hint
+    s = re.sub(r"```", "", s)                 # closing ```
+    s = re.sub(r"``", "", s)                  # double backtick
+    # Strip markdown bold/italic (**text**, *text*, __text__, _text_)
+    s = re.sub(r"\*\*(.+?)\*\*", r"\1", s)
+    s = re.sub(r"\*(.+?)\*", r"\1", s)
+    s = re.sub(r"__(.+?)__", r"\1", s)
+    s = re.sub(r"_(.+?)_", r"\1", s)
+    # Strip markdown headings (## Title → Title)
+    s = re.sub(r"^#{1,6}\s+", "", s, flags=re.MULTILINE)
+    # Strip inline code backticks (`code` → code)
+    s = re.sub(r"`([^`]+)`", r"\1", s)
     return s.strip()
 
 
