@@ -80,21 +80,29 @@ from app.services.doubt_solver_engine import solve_doubt_intelligently, detect_s
 @router.post("/doubts/solve", response_model=DoubtSolveOut)
 async def solve_doubt(body: DoubtSolveIn, current_user: User = Depends(get_current_user), db: DBSession = Depends(get_db)):
     if not body.question_text or len(body.question_text.strip()) < 2:
-        raise HTTPException(status_code=422, detail="Question text must be at least 2 characters")
+        raise HTTPException(status_code=422, detail="Question text is too short. Minimum 2 characters required.")
     subject = detect_subject(body.question_text, body.subject)
     
-    user_context = body.user_context
-    if not user_context and current_user:
-        parts = []
-        if current_user.display_name or current_user.full_name:
-            parts.append(f"Student: {current_user.display_name or current_user.full_name}")
-        if current_user.class_or_year:
-            parts.append(f"Grade/Level: {current_user.class_or_year}")
-        if current_user.education_type:
-            parts.append(f"Exam: {current_user.education_type}")
-        if current_user.primary_subject:
-            parts.append(f"Subject: {current_user.primary_subject}")
-        user_context = " | ".join(parts)
+    # Build rich student context for personalized AI guidance
+    context_parts = []
+    if current_user:
+        name = current_user.display_name or current_user.full_name
+        if name:
+            context_parts.append(f"Student: {name}")
+        grade = current_user.class_or_year
+        if grade:
+            context_parts.append(f"Grade/Level: {grade}")
+        exam = current_user.exam_target or current_user.education_type
+        if exam:
+            context_parts.append(f"Target Exam: {exam}")
+        if current_user.study_goal:
+            context_parts.append(f"Goal: {current_user.study_goal}")
+    if body.user_context:
+        context_parts.append(body.user_context)
+    if subject and f"Subject: {subject}" not in context_parts:
+        context_parts.append(f"Subject: {subject}")
+        
+    user_context = " | ".join(context_parts) if context_parts else None
 
     steps, final_answer, key_concepts, related_topics, question_type, confidence, confidence_label = solve_doubt_intelligently(
         body.question_text, body.subject, body.follow_up_action, body.chat_history, user_context=user_context
