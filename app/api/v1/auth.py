@@ -280,29 +280,3 @@ async def firebase_login(
     db.refresh(current_user)
 
     return AuthOut(user=UserProfileOut.model_validate(current_user))
-
-
-# ─── Profile ─────────────────────────────────────────────────────────────────
-
-@router.get("/me", response_model=UserProfileOut)
-async def get_me(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """Get the currently authenticated user's profile."""
-    current_user.profile_complete = profile_is_complete(current_user)
-    db.commit()
-    return UserProfileOut.model_validate(current_user)
-
-
-@router.patch("/me", response_model=UserProfileOut)
-async def update_me(
-    body: UserUpdateIn,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    """Update the current user's profile (name, country, exam tags, etc.)."""
-    update_data = body.model_dump(exclude_unset=True)
-    for field, value in update_data.items():
-        setattr(current_user, field, value)
-    current_user.profile_complete = profile_is_complete(current_user)
-    db.commit()
-    db.refresh(current_user)
-    return UserProfileOut.model_validate(current_user)

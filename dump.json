@@ -1,0 +1,57 @@
+[
+  {
+    "id": "e03bd1b3-6c47-48e8-941d-0864935ace62",
+    "text": "A quadratic function f(x)=a(x-3)^2 -5 has its vertex at (3, -5) and passes through the point (4, 0). What is the value of a?",
+    "options": [
+      "5",
+      "-5",
+      "1/5",
+      "-1/5"
+    ],
+    "correct_answer": "5"
+  },
+  {
+    "id": "d89e3c3d-875f-42a3-b33e-1d92253abefa",
+    "text": "Triangle ABC has side lengths AB=13, AC=15, and BC=14. What is the radius of the circle inscribed in the triangle?",
+    "options": [
+      "3",
+      "4",
+      "5",
+      "6"
+    ],
+    "correct_answer": "4"
+  },
+  {
+    "id": "dc199ab2-b9d8-4e83-89c9-11a7e57b0997",
+    "text": "For what value of k does the system of equations 2x + 3y = 7 and 4x + ky = 14 have infinitely many solutions?",
+    "options": [
+      "6",
+      "7",
+      "5",
+      "8"
+    ],
+    "correct_answer": "6"
+  },
+  {
+    "id": "41e868f3-f400-4e4f-8b00-5efd83444843",
+    "text": "A line passes through the points (2, 3) and (k, 12). If the slope of the line equals the y-intercept of the line, what is the value of k?",
+    "options": [
+      "9",
+      "10",
+      "11",
+      "12"
+    ],
+    "correct_answer": "11"
+  },
+  {
+    "id": "d54df330-5afa-4f55-b41e-2afdd1e389b3",
+    "text": "Let f(x)=2x+5 and g(x)=x^2-4. What is the smallest integer x such that (g∘f)(x) > 100?",
+    "options": [
+      "2",
+      "3",
+      "4",
+      "5"
+    ],
+    "correct_answer": "3"
+  }
+]

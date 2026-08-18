@@ -33,7 +33,7 @@ from app.db.redis_client import close_redis, get_redis
 from app.models import *  # noqa: ensure models are registered
 
 # Import routers
-from app.api.v1 import auth, sessions, leaderboard, quiz, users, admin, rewards, badges, app_lock, referral, topics, reports, app_version, support, reward_configs, subjects, study_rooms, wallet, study_history, doubts
+from app.api.v1 import auth, sessions, leaderboard, quiz, users, admin, rewards, badges, referral, topics, app_version, support, reward_configs, subjects, study_rooms, wallet, study_history, doubts
 
 # Rate limiting
 from slowapi import _rate_limit_exceeded_handler
@@ -156,10 +156,8 @@ app.include_router(quiz.router, prefix=API_PREFIX)
 app.include_router(admin.router, prefix=API_PREFIX)
 app.include_router(rewards.router, prefix=API_PREFIX)
 app.include_router(badges.router, prefix=API_PREFIX)
-app.include_router(app_lock.router, prefix=API_PREFIX)
 app.include_router(referral.router, prefix=API_PREFIX)
 app.include_router(topics.router, prefix=API_PREFIX)
-app.include_router(reports.router, prefix=API_PREFIX)
 app.include_router(app_version.router, prefix=API_PREFIX)
 app.include_router(support.router, prefix=API_PREFIX)
 app.include_router(reward_configs.router, prefix=API_PREFIX)

@@ -14,7 +14,7 @@ from app.schemas import (
     SessionEndIn, SessionEndOut, BadgeOut,
     SessionAdDoubleIn, SessionAdDoubleOut,
     SessionPauseOut, SessionResumeOut, SessionHeartbeatIn, SessionHeartbeatOut,
-    SessionOut, SocialUnlockOut, SocialUnlockAdOut,
+    SessionOut,
 )
 from app.services.points_service import (
     calculate_points, apply_ad_double, get_daily_verified_minutes
@@ -462,64 +462,6 @@ async def session_heartbeat(
     return SessionHeartbeatOut(status="ok", elapsed_seconds=max(0, elapsed))
 
 
-@router.get("/social-unlock", response_model=SocialUnlockOut)
-async def get_social_unlock(
-    current_user: User = Depends(get_current_user),
-    db: DBSession = Depends(get_db),
-):
-    """Get current social unlock bank status."""
-    now = datetime.now(timezone.utc)
-    _reset_social_unlock_if_needed(current_user, now)
-    db.commit()
-
-    ad_available, cooldown_secs = _check_social_ad_availability(current_user, now)
-
-    return SocialUnlockOut(
-        minutes_remaining=current_user.social_unlock_minutes_today,
-        minutes_earned_today=current_user.social_unlock_minutes_today,
-        ad_bonus_available=ad_available,
-        ad_bonus_cooldown_seconds=cooldown_secs if not ad_available else None,
-    )
-
-
-@router.post("/social-unlock/ad", response_model=SocialUnlockAdOut)
-async def claim_social_unlock_ad(
-    current_user: User = Depends(get_current_user),
-    db: DBSession = Depends(get_db),
-):
-    """Claim +5 min social unlock after watching a rewarded ad (once per 2hrs)."""
-    now = datetime.now(timezone.utc)
-    _reset_social_unlock_if_needed(current_user, now)
-
-    ad_available, cooldown_secs = _check_social_ad_availability(current_user, now)
-    if not ad_available:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Ad not yet available. Try again in {cooldown_secs // 60} minutes."
-        )
-
-    current_user.social_unlock_minutes_today += SOCIAL_UNLOCK_AD_BONUS
-    # Store last ad time in ad_doubles_reset_at (reuse field for simplicity)
-    # Actually use a dedicated approach via notification_prefs JSON
-    if current_user.notification_prefs is None:
-        current_user.notification_prefs = {}
-    current_user.notification_prefs = {
-        **current_user.notification_prefs,
-        "last_social_ad_at": now.isoformat(),
-    }
-    db.commit()
-    db.refresh(current_user)
-
-    next_available = now + timedelta(hours=SOCIAL_UNLOCK_AD_COOLDOWN_HRS)
-
-    return SocialUnlockAdOut(
-        minutes_added=SOCIAL_UNLOCK_AD_BONUS,
-        minutes_remaining=current_user.social_unlock_minutes_today,
-        next_ad_available_at=next_available,
-        success=True,
-    )
-
-
 @router.get("/history", response_model=list[SessionOut])
 async def get_session_history(
     limit: int = 20,
@@ -557,32 +499,6 @@ def _update_streak(user: User, now: datetime):
     else:
         user.streak_count = 1
     user.last_study_date = now
-
-
-def _reset_social_unlock_if_needed(user: User, now: datetime):
-    """Reset social unlock bank at local midnight (approximated as UTC midnight)."""
-    if user.social_unlock_reset_at is None or user.social_unlock_reset_at.date() < now.date():
-        user.social_unlock_minutes_today = 0
-        user.social_unlock_reset_at = now
-
-
-def _add_social_unlock(user: User, minutes: int, now: datetime):
-    _reset_social_unlock_if_needed(user, now)
-    user.social_unlock_minutes_today += minutes
-
-
-def _check_social_ad_availability(user: User, now: datetime) -> tuple[bool, int]:
-    """Returns (is_available, cooldown_seconds_remaining)."""
-    prefs = user.notification_prefs or {}
-    last_ad_str = prefs.get("last_social_ad_at")
-    if not last_ad_str:
-        return True, 0
-    last_ad = datetime.fromisoformat(last_ad_str)
-    cooldown_end = last_ad + timedelta(hours=SOCIAL_UNLOCK_AD_COOLDOWN_HRS)
-    if now >= cooldown_end:
-        return True, 0
-    remaining = int((cooldown_end - now).total_seconds())
-    return False, remaining
 
 
 def _auto_claim_referral(user: User, db: DBSession):
