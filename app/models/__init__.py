@@ -171,7 +171,8 @@ class User(Base, TimestampMixin):
     # Quovex Freedom Lock fields
     reset_time_hour = Column(Integer, default=8, nullable=True, comment="Daily reset time (default 8 for 8:00 AM)")
     lock_mode = Column(String(50), default="STRICT", nullable=True, comment="STRICT | SMART | WEEKEND_RELAXED")
-    wallet_minutes = Column(Integer, default=120, nullable=True, comment="Study Wallet balance in minutes")
+    wallet_minutes = Column(Integer, default=0, nullable=True, comment="Study Wallet balance in minutes")
+    welcome_gift_claimed = Column(Boolean, default=False, nullable=True, comment="True once user claims onboarding welcome gift")
 
     profile_complete = Column(Boolean, default=False, nullable=False,
                               comment="True once user finishes the post-signup profile form")

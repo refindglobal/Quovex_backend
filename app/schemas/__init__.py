@@ -65,7 +65,8 @@ class UserProfileOut(BaseModel):
     study_time_preference: Optional[str] = None
     reset_time_hour: Optional[int] = 8
     lock_mode: Optional[str] = "STRICT"
-    wallet_minutes: Optional[int] = 120
+    wallet_minutes: Optional[int] = 0
+    welcome_gift_claimed: bool = False
     profile_complete: bool = False
     referral_code: Optional[str] = None
     referred_by_id: Optional[UUID] = None

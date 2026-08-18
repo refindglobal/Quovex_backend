@@ -71,7 +71,7 @@ async def get_today_session(
 
     total_mins = sum(s.verified_minutes for s in sessions)
     xp_today = sum(s.points_awarded for s in sessions)
-    target_mins = int((current_user.daily_study_target_minutes or 4.0) * 60) if current_user.daily_study_target_minutes else 240
+    target_mins = int(current_user.daily_target_hours * 60) if current_user.daily_target_hours else (current_user.daily_study_target_minutes or 240)
 
     return TodaySessionSummaryOut(
         total_minutes_today=total_mins,

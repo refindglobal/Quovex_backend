@@ -139,9 +139,18 @@ async def claim_welcome_gift(
     current_user: User = Depends(get_current_user),
     db: DBSession = Depends(get_db),
 ):
-    """Claim onboarding starter boost (+30 wallet minutes, 1 streak freeze, +50 XP)."""
-    current_user.wallet_minutes = (current_user.wallet_minutes or 120) + 30
+    """Claim onboarding starter boost (+30 wallet minutes, 1 streak freeze, +50 XP). Can only be claimed once."""
+    if getattr(current_user, "welcome_gift_claimed", False):
+        return {
+            "status": "already_claimed",
+            "wallet_minutes": current_user.wallet_minutes or 0,
+            "points_total": current_user.points_total or 0,
+            "message": "Welcome gift has already been claimed."
+        }
+
+    current_user.wallet_minutes = (current_user.wallet_minutes or 0) + 30
     current_user.points_total = (current_user.points_total or 0) + 50
+    current_user.welcome_gift_claimed = True
     now = datetime.now(timezone.utc)
     if not current_user.streak_frozen_until or current_user.streak_frozen_until < now:
         current_user.streak_frozen_until = now + timedelta(hours=24)
@@ -151,7 +160,7 @@ async def claim_welcome_gift(
         "status": "ok",
         "wallet_minutes": current_user.wallet_minutes,
         "points_total": current_user.points_total,
-        "message": "Welcome gift claimed successfully!"
+        "message": "Welcome gift claimed successfully! +30 Time Wallet minutes and +50 XP granted."
     }
 
 

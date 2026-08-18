@@ -74,6 +74,8 @@ async def lifespan(app: FastAPI):
                 conn.execute(text("ALTER TABLE topics ALTER COLUMN name TYPE VARCHAR(500);"))
                 conn.execute(text("ALTER TABLE topics ALTER COLUMN subject TYPE VARCHAR(500);"))
                 conn.execute(text("ALTER TABLE doubts ALTER COLUMN subject TYPE VARCHAR(500);"))
+                conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS welcome_gift_claimed BOOLEAN DEFAULT FALSE;"))
+                conn.execute(text("ALTER TABLE users ALTER COLUMN wallet_minutes SET DEFAULT 0;"))
                 conn.commit()
                 logger.info("Column expansion migration verified/applied.")
     except Exception as e:

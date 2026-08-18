@@ -2,8 +2,8 @@
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session as DBSession
 
 from app.core.security import get_current_user
@@ -29,9 +29,14 @@ class WalletOut(BaseModel):
 
 
 class AppUnlockIn(BaseModel):
-    app_package: str      # e.g. "com.instagram.android"
-    app_display_name: str  # e.g. "Instagram"
-    unlock_minutes: int   # 15, 30, or 60
+    app_package: Optional[str] = None
+    package_name: Optional[str] = None
+    app_display_name: str = "App"
+    unlock_minutes: int = 15
+
+    @property
+    def target_package(self) -> str:
+        return self.package_name or self.app_package or "com.distraction.app"
 
 
 class AppUnlockOut(BaseModel):
@@ -52,29 +57,11 @@ async def get_wallet(
     """Get the user's current study wallet balance and recent transaction history."""
     balance = current_user.wallet_minutes or 0
 
-    transactions = [
-        WalletTransactionOut(
-            description="Focus Session Completed",
-            minutes_delta=60,
-            created_at=datetime.now(timezone.utc).isoformat(),
-        ),
-        WalletTransactionOut(
-            description="Daily Quiz Completed",
-            minutes_delta=15,
-            created_at=(datetime.now(timezone.utc) - timedelta(hours=2)).isoformat(),
-        ),
-        WalletTransactionOut(
-            description="Streak Milestone Bonus",
-            minutes_delta=30,
-            created_at=(datetime.now(timezone.utc) - timedelta(days=1)).isoformat(),
-        ),
-    ]
-
     return WalletOut(
         wallet_minutes=balance,
         balance_minutes=balance,
         total_earned_minutes=balance,
-        transactions=transactions,
+        transactions=[],
     )
 
 
@@ -85,11 +72,10 @@ async def unlock_app(
     db: DBSession = Depends(get_db),
 ):
     """Spend wallet minutes to temporarily unlock a blocked app."""
-    allowed_minutes = [15, 30, 60]
-    if body.unlock_minutes not in allowed_minutes:
+    if body.unlock_minutes <= 0 or body.unlock_minutes > 180:
         raise HTTPException(
             status_code=400,
-            detail=f"unlock_minutes must be one of {allowed_minutes}",
+            detail="unlock_minutes must be between 1 and 180 minutes",
         )
 
     current_balance = current_user.wallet_minutes or 0
@@ -119,20 +105,22 @@ async def unlock_app(
 
 @router.post("/add-minutes", response_model=WalletOut)
 async def add_wallet_minutes(
-    minutes: int,
-    reason: str = "rewarded_ad",
+    minutes: int = Query(10, description="Minutes to add"),
+    reason: str = Query("rewarded_ad", description="Reason for addition"),
     current_user: User = Depends(get_current_user),
     db: DBSession = Depends(get_db),
 ):
-    """Add minutes to wallet (from rewarded ad or quiz bonus). Internal use."""
-    if minutes <= 0 or minutes > 60:
-        raise HTTPException(status_code=400, detail="minutes must be between 1 and 60")
+    """Add minutes to wallet (from rewarded ad or quiz bonus)."""
+    if minutes <= 0 or minutes > 180:
+        raise HTTPException(status_code=400, detail="minutes must be between 1 and 180")
 
     current_user.wallet_minutes = (current_user.wallet_minutes or 0) + minutes
     db.commit()
 
     return WalletOut(
         wallet_minutes=current_user.wallet_minutes,
+        balance_minutes=current_user.wallet_minutes,
+        total_earned_minutes=current_user.wallet_minutes,
         transactions=[
             WalletTransactionOut(
                 description=f"Reward: {reason}",
