@@ -210,7 +210,7 @@ async def end_session(
     current_user.points_total += points
 
     # Update streak
-    _update_streak(current_user, now)
+    _update_streak(current_user, now, verified_minutes)
 
     # First session completed (for referral bonus)
     if verified_minutes > 0 and not current_user.first_session_completed:
@@ -486,19 +486,9 @@ async def get_session_history(
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
-def _update_streak(user: User, now: datetime):
-    today = now.date()
-    if user.last_study_date:
-        last = user.last_study_date.date()
-        if last == today:
-            pass  # Already studied today
-        elif last == today - timedelta(days=1):
-            user.streak_count += 1
-        else:
-            user.streak_count = 1  # Streak broken
-    else:
-        user.streak_count = 1
-    user.last_study_date = now
+def _update_streak(user: User, now: datetime, verified_minutes: int = 0):
+    from app.services.streak_service import update_streak_on_session_complete
+    return update_streak_on_session_complete(user, verified_minutes, now)
 
 
 def _auto_claim_referral(user: User, db: DBSession):

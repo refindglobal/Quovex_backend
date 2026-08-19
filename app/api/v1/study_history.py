@@ -167,6 +167,9 @@ async def get_weekly_analytics(
             subject_count[s.subject_tag] = subject_count.get(s.subject_tag, 0) + s.verified_minutes
     best_subject = max(subject_count, key=subject_count.get) if subject_count else None
 
+    from app.services.streak_service import calculate_effective_streak
+    effective_streak, _, _ = calculate_effective_streak(current_user)
+
     return WeeklyAnalyticsOut(
         week_labels=days,
         study_minutes=study_minutes_per_day,
@@ -175,7 +178,7 @@ async def get_weekly_analytics(
         total_last_week=total_last_week,
         best_day=best_day,
         best_subject=best_subject,
-        current_streak=current_user.streak_count,
+        current_streak=effective_streak,
     )
 
 

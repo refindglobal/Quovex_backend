@@ -21,6 +21,9 @@ class StreakOut(BaseModel):
     current_streak: int
     longest_streak: int
     freeze_available: int
+    is_frozen: bool = False
+    studied_today: bool = False
+    streak_frozen_until: Optional[str] = None
 
 streak_router = APIRouter(prefix="/streak", tags=["streak"])
 
@@ -31,10 +34,16 @@ async def get_streak(
     db: DBSession = Depends(get_db),
 ):
     """Get current streak status."""
+    from app.services.streak_service import calculate_effective_streak
+    effective_streak, is_frozen, studied_today = calculate_effective_streak(current_user)
+    frozen_until_str = current_user.streak_frozen_until.isoformat() if current_user.streak_frozen_until else None
     return StreakOut(
-        current_streak=current_user.streak_count or 0,
-        longest_streak=current_user.streak_count or 0,
-        freeze_available=1 if current_user.streak_frozen_until else 0,
+        current_streak=effective_streak,
+        longest_streak=max(effective_streak, current_user.streak_count or 0),
+        freeze_available=1 if is_frozen else 0,
+        is_frozen=is_frozen,
+        studied_today=studied_today,
+        streak_frozen_until=frozen_until_str,
     )
 
 
@@ -81,6 +90,9 @@ async def get_my_profile(
     db: DBSession = Depends(get_db),
 ):
     """Get the authenticated user's full profile. Runs class auto-advance if applicable."""
+    from app.services.streak_service import calculate_effective_streak
+    effective_streak, _, _ = calculate_effective_streak(current_user)
+    current_user.streak_count = effective_streak
     _auto_advance_class_if_april(current_user, db)
     _validate_and_clean_exam_tags(current_user, db)
     current_user.profile_complete = profile_is_complete(current_user)
@@ -119,18 +131,22 @@ async def streak_freeze(
 ):
     """Freeze streak for 24 hours after watching a rewarded ad."""
     now = datetime.now(timezone.utc)
-    if current_user.streak_frozen_until and current_user.streak_frozen_until > now:
-        remaining = int((current_user.streak_frozen_until - now).total_seconds())
-        raise HTTPException(
-            status_code=400,
-            detail=f"Streak already frozen. {remaining // 3600}h {remaining % 3600 // 60}m remaining.",
-        )
+    frozen = current_user.streak_frozen_until
+    if frozen is not None and frozen.tzinfo is None:
+        frozen = frozen.replace(tzinfo=timezone.utc)
+    if frozen and frozen > now:
+        remaining = int((frozen - now).total_seconds())
+        return {
+            "status": "already_frozen",
+            "streak_frozen_until": frozen.isoformat(),
+            "message": f"Streak is already protected for another {remaining // 3600}h {(remaining % 3600) // 60}m.",
+        }
     current_user.streak_frozen_until = now + timedelta(hours=24)
     db.commit()
     return {
         "status": "ok",
         "streak_frozen_until": current_user.streak_frozen_until.isoformat(),
-        "message": "Streak frozen for 24 hours.",
+        "message": "Streak frozen and protected for 24 hours.",
     }
 
 
