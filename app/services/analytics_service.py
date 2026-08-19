@@ -7,7 +7,10 @@ from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session as DBSession
 from sqlalchemy import func
 
-from app.models import User, Session as StudySession, UserSubjectProficiency, UserTopicProgress, Topic, QuizSession
+from app.models import (
+    User, Session as StudySession, UserSubjectProficiency, UserTopicProgress,
+    Topic, QuizSession, AdRevenueLog
+)
 from app.services.streak_service import calculate_effective_streak
 
 
@@ -440,3 +443,92 @@ def get_exam_progress(user: User, db: DBSession) -> Dict[str, Any]:
         ],
         "weak_topics": ["Electrochemistry", "Thermodynamics", "3D Geometry"]
     }
+
+
+def get_geo_breakdown(db: DBSession, days: int = 30) -> List[Dict[str, Any]]:
+    """DAU, verified minutes, and estimated revenue breakdown by country for admin analytics."""
+    now = datetime.now(timezone.utc)
+    since = now - timedelta(days=days)
+
+    user_counts = (
+        db.query(
+            User.country,
+            func.count(User.id).label("user_count"),
+            func.coalesce(func.sum(User.verified_minutes_total), 0).label("total_minutes")
+        )
+        .filter(User.is_banned == False)
+        .group_by(User.country)
+        .all()
+    )
+
+    rev_by_country = {}
+    try:
+        rev_rows = (
+            db.query(
+                AdRevenueLog.country,
+                func.coalesce(func.sum(AdRevenueLog.revenue_usd_est), 0).label("rev")
+            )
+            .filter(AdRevenueLog.created_at >= since)
+            .group_by(AdRevenueLog.country)
+            .all()
+        )
+        for r in rev_rows:
+            if r.country:
+                rev_by_country[r.country] = float(r.rev or 0.0)
+    except Exception:
+        pass
+
+    results = []
+    for row in user_counts:
+        country_name = row.country or "Global"
+        mins = int(row.total_minutes or 0)
+        results.append({
+            "country": country_name,
+            "dau": int(row.user_count or 0),
+            "users": int(row.user_count or 0),
+            "verified_minutes": mins,
+            "revenue_usd": round(rev_by_country.get(country_name, (mins / 60.0) * 0.02), 2)
+        })
+
+    results.sort(key=lambda x: x["users"], reverse=True)
+    return results
+
+
+def get_divergence_analysis(db: DBSession, days: int = 30) -> Dict[str, Any]:
+    """Points-vs-verified-minutes divergence analysis for ad-grinding and anomaly detection."""
+    now = datetime.now(timezone.utc)
+    since = now - timedelta(days=days)
+
+    sessions = (
+        db.query(StudySession)
+        .filter(
+            StudySession.start_time >= since,
+            StudySession.is_active == False,
+            StudySession.flagged == False
+        )
+        .all()
+    )
+
+    total_minutes = sum(s.verified_minutes for s in sessions)
+    total_points = sum(s.points_awarded for s in sessions)
+
+    daily_map = {}
+    for s in sessions:
+        day_str = s.start_time.strftime("%Y-%m-%d")
+        if day_str not in daily_map:
+            daily_map[day_str] = {"date": day_str, "verified_minutes": 0, "points_awarded": 0}
+        daily_map[day_str]["verified_minutes"] += s.verified_minutes
+        daily_map[day_str]["points_awarded"] += s.points_awarded
+
+    daily_trend = sorted(daily_map.values(), key=lambda x: x["date"])
+    ratio = (total_points / total_minutes) if total_minutes > 0 else 1.0
+
+    return {
+        "daily_trend": daily_trend,
+        "total_verified_minutes": total_minutes,
+        "total_points_awarded": total_points,
+        "points_per_minute_ratio": round(ratio, 4),
+        "alert": ratio > 2.0,
+        "alert_message": "Points-to-minutes ratio is abnormally high — possible ad-grinding" if ratio > 2.0 else None,
+    }
+
