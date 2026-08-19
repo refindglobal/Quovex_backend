@@ -19,7 +19,7 @@ from app.models import (
 )
 
 
-CACHE_TTL = 300  # 5 minutes
+CACHE_TTL = 30  # 30 seconds for live real-time freshness
 
 
 def _cache_key(track: str, scope: str, period: str, exam_tag: Optional[str] = None,
