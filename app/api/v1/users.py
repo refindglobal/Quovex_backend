@@ -151,9 +151,18 @@ async def claim_welcome_gift(
     current_user.wallet_minutes = (current_user.wallet_minutes or 0) + 30
     current_user.points_total = (current_user.points_total or 0) + 50
     current_user.welcome_gift_claimed = True
-    now = datetime.now(timezone.utc)
-    if not current_user.streak_frozen_until or current_user.streak_frozen_until < now:
-        current_user.streak_frozen_until = now + timedelta(hours=24)
+
+    # Safe timezone-aware comparison for streak freeze
+    try:
+        now = datetime.now(timezone.utc)
+        frozen = current_user.streak_frozen_until
+        if frozen is not None and frozen.tzinfo is None:
+            frozen = frozen.replace(tzinfo=timezone.utc)
+        if frozen is None or frozen < now:
+            current_user.streak_frozen_until = now + timedelta(hours=24)
+    except Exception:
+        current_user.streak_frozen_until = datetime.now(timezone.utc) + timedelta(hours=24)
+
     db.commit()
     db.refresh(current_user)
     return {
