@@ -220,3 +220,89 @@ async def get_verification_quiz(
         "correct_index": quiz["correct_index"],
         "reward_xp_bonus": 30,
     }
+
+
+# ─── Comprehensive 12-Screen Progress Analytics Endpoints ─────────────────────
+
+@router.get("/overview", response_model=dict)
+async def get_progress_overview_endpoint(
+    current_user: User = Depends(get_current_user),
+    db: DBSession = Depends(get_db),
+):
+    """Screen 1: Main Progress Overview (Score ring, weekly chart, consistency, subject previews)."""
+    from app.services.analytics_service import get_progress_overview
+    return get_progress_overview(current_user, db)
+
+
+@router.get("/analytics-deep", response_model=dict)
+async def get_deep_analytics_endpoint(
+    period: str = Query(default="7d", regex="^(7d|30d|90d|custom)$"),
+    current_user: User = Depends(get_current_user),
+    db: DBSession = Depends(get_db),
+):
+    """Screen 2: Study Analytics Deep Dive (Line/Area timeseries chart, peak focus windows)."""
+    from app.services.analytics_service import get_study_analytics_deep
+    return get_study_analytics_deep(current_user, period, db)
+
+
+@router.get("/subjects", response_model=dict)
+async def get_subjects_progress_endpoint(
+    current_user: User = Depends(get_current_user),
+    db: DBSession = Depends(get_db),
+):
+    """Screen 3: Subject Progress (Overall progress bar, all subject cards)."""
+    from app.services.analytics_service import get_subject_progress_list
+    return get_subject_progress_list(current_user, db)
+
+
+@router.get("/subjects/{subject_name}", response_model=dict)
+async def get_subject_detail_endpoint(
+    subject_name: str,
+    current_user: User = Depends(get_current_user),
+    db: DBSession = Depends(get_db),
+):
+    """Screen 4: Subject Detail (Topic list, accuracy, weak topics, AI recommendations)."""
+    from app.services.analytics_service import get_subject_detail
+    return get_subject_detail(current_user, subject_name, db)
+
+
+@router.get("/goals", response_model=dict)
+async def get_goals_endpoint(
+    current_user: User = Depends(get_current_user),
+    db: DBSession = Depends(get_db),
+):
+    """Screen 5: Goals & Targets (Daily, weekly, monthly targets and percentage completion)."""
+    from app.services.analytics_service import get_goals_and_targets
+    return get_goals_and_targets(current_user, db)
+
+
+@router.get("/insights", response_model=dict)
+async def get_ai_insights_endpoint(
+    current_user: User = Depends(get_current_user),
+    db: DBSession = Depends(get_db),
+):
+    """Screen 8: AI Progress Insights (What you're doing well, Needs attention, Recommended)."""
+    from app.services.analytics_service import get_ai_progress_insights
+    return get_ai_progress_insights(current_user, db)
+
+
+@router.get("/comparison", response_model=dict)
+async def get_performance_comparison_endpoint(
+    period: str = Query(default="week"),
+    current_user: User = Depends(get_current_user),
+    db: DBSession = Depends(get_db),
+):
+    """Screen 12: Performance Comparison (This week vs Last week metric table)."""
+    from app.services.analytics_service import get_performance_comparison
+    return get_performance_comparison(current_user, period, db)
+
+
+@router.get("/exam-progress", response_model=dict)
+async def get_exam_progress_endpoint(
+    current_user: User = Depends(get_current_user),
+    db: DBSession = Depends(get_db),
+):
+    """Screen 11: Exam Progress (Readiness meter, topics completed, weak topics)."""
+    from app.services.analytics_service import get_exam_progress
+    return get_exam_progress(current_user, db)
+
