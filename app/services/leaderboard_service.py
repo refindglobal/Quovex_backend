@@ -96,7 +96,11 @@ def compute_leaderboard(
                 User.country,
                 User.state,
                 User.streak_count,
-                User.quiz_points_total.label("score"),
+                func.greatest(
+                    func.coalesce(User.quiz_points_total, 0),
+                    func.coalesce(User.verified_quiz_score, 0),
+                    func.coalesce(User.points_total, 0)
+                ).label("score"),
             )
         else:
             query = (
@@ -107,7 +111,11 @@ def compute_leaderboard(
                     User.country,
                     User.state,
                     User.streak_count,
-                    func.coalesce(func.sum(QuizSession.verified_quiz_score_earned), User.quiz_points_total, 0).label("score"),
+                    func.greatest(
+                        func.coalesce(func.sum(QuizSession.verified_quiz_score_earned), 0),
+                        func.coalesce(User.quiz_points_total, 0),
+                        func.coalesce(User.verified_quiz_score, 0)
+                    ).label("score"),
                 )
                 .outerjoin(
                     QuizSession,
@@ -125,7 +133,10 @@ def compute_leaderboard(
                 User.country,
                 User.state,
                 User.streak_count,
-                User.points_total.label("score"),
+                func.greatest(
+                    func.coalesce(User.points_total, 0),
+                    func.coalesce(User.verified_minutes_total, 0) + func.coalesce(User.quiz_points_total, 0) * 0.5
+                ).label("score"),
             )
         else:
             study_score = (
@@ -161,9 +172,10 @@ def compute_leaderboard(
                     User.country,
                     User.state,
                     User.streak_count,
-                    (
+                    func.greatest(
                         func.coalesce(study_score.c.study_score, 0)
-                        + func.coalesce(quiz_score.c.quiz_score, 0) * 0.5
+                        + func.coalesce(quiz_score.c.quiz_score, 0) * 0.5,
+                        func.coalesce(User.points_total, 0)
                     ).label("score"),
                 )
                 .outerjoin(study_score, study_score.c.user_id == User.id)
