@@ -358,3 +358,74 @@ async def get_user_public(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     return UserPublicOut.model_validate(user)
+
+
+# ─── YOU TAB 12-SCREEN SUITE ENDPOINTS ──────────────────────────────────────
+
+@router.get("/me/wallet/data")
+async def get_user_wallet(
+    current_user: User = Depends(get_current_user),
+    db: DBSession = Depends(get_db),
+):
+    """Get wallet balance, stats, and transaction ledger (Screen 3)."""
+    from app.services.you_service import get_wallet_data
+    return get_wallet_data(current_user, db)
+
+
+@router.get("/me/rewards/data")
+async def get_user_rewards(
+    current_user: User = Depends(get_current_user),
+    db: DBSession = Depends(get_db),
+):
+    """Get rewards catalog & monthly leaderboard prize progress (Screen 4)."""
+    from app.services.you_service import get_my_rewards
+    return get_my_rewards(current_user, db)
+
+
+@router.get("/me/friends/social")
+async def get_user_friends(
+    current_user: User = Depends(get_current_user),
+    db: DBSession = Depends(get_db),
+):
+    """Get friend list, online presence, and study activity (Screen 5)."""
+    from app.services.you_service import get_friends_social
+    return get_friends_social(current_user, db)
+
+
+@router.get("/me/devices/linked")
+async def get_linked_devices(
+    current_user: User = Depends(get_current_user),
+    db: DBSession = Depends(get_db),
+):
+    """Get active and historical linked devices for security (Screen 6)."""
+    from app.services.you_service import get_user_devices
+    return get_user_devices(current_user, db)
+
+
+@router.get("/me/activity-log/data")
+async def get_activity_log(
+    category: str = Query("all", enum=["all", "sessions", "quiz", "wallet", "system"]),
+    current_user: User = Depends(get_current_user),
+    db: DBSession = Depends(get_db),
+):
+    """Get chronological activity history (Screen 7)."""
+    from app.services.you_service import get_user_activity_log
+    return get_user_activity_log(current_user, category, db)
+
+
+@router.get("/me/achievements/grid")
+async def get_achievements(
+    current_user: User = Depends(get_current_user),
+    db: DBSession = Depends(get_db),
+):
+    """Get complete achievements grid with real unlock status (Screen 8)."""
+    from app.services.you_service import get_achievements_grid
+    return get_achievements_grid(current_user, db)
+
+
+@router.get("/me/help/faqs")
+async def get_help_faqs():
+    """Get Help & Support FAQs hub (Screen 10)."""
+    from app.services.you_service import get_faqs_hub
+    return get_faqs_hub()
+
