@@ -58,84 +58,117 @@ def compute_leaderboard(
 
     # Build the ranking query based on track
     if track == LeaderboardTrack.study:
-        rank_col = func.sum(StudySession.verified_minutes).label("score")
-        query = (
-            db.query(
+        if period == LeaderboardPeriod.all_time:
+            query = db.query(
                 User.id.label("user_id"),
                 User.display_name,
                 User.avatar_url,
                 User.country,
                 User.state,
                 User.streak_count,
-                rank_col,
+                User.verified_minutes_total.label("score"),
             )
-            .join(StudySession, StudySession.user_id == User.id)
-            .filter(
-                StudySession.start_time >= since,
-                StudySession.is_active == False,
-                StudySession.flagged == False,
+        else:
+            rank_col = func.sum(StudySession.verified_minutes).label("score")
+            query = (
+                db.query(
+                    User.id.label("user_id"),
+                    User.display_name,
+                    User.avatar_url,
+                    User.country,
+                    User.state,
+                    User.streak_count,
+                    rank_col,
+                )
+                .join(StudySession, StudySession.user_id == User.id)
+                .filter(
+                    StudySession.start_time >= since,
+                    StudySession.is_active == False,
+                    StudySession.flagged == False,
+                )
             )
-        )
     elif track == LeaderboardTrack.quiz:
-        query = (
-            db.query(
+        if period == LeaderboardPeriod.all_time:
+            query = db.query(
                 User.id.label("user_id"),
                 User.display_name,
                 User.avatar_url,
                 User.country,
                 User.state,
                 User.streak_count,
-                func.coalesce(func.sum(QuizSession.verified_quiz_score_earned), 0).label("score"),
+                User.quiz_points_total.label("score"),
             )
-            .outerjoin(
-                QuizSession,
-                (QuizSession.user_id == User.id)
-                & (QuizSession.start_time >= since)
-                & (QuizSession.is_complete == True)
+        else:
+            query = (
+                db.query(
+                    User.id.label("user_id"),
+                    User.display_name,
+                    User.avatar_url,
+                    User.country,
+                    User.state,
+                    User.streak_count,
+                    func.coalesce(func.sum(QuizSession.verified_quiz_score_earned), User.quiz_points_total, 0).label("score"),
+                )
+                .outerjoin(
+                    QuizSession,
+                    (QuizSession.user_id == User.id)
+                    & (QuizSession.start_time >= since)
+                    & (QuizSession.is_complete == True)
+                )
             )
-        )
     else:
-        study_score = (
-            db.query(
-                StudySession.user_id,
-                func.coalesce(func.sum(StudySession.verified_minutes), 0).label("study_score"),
-            )
-            .filter(
-                StudySession.start_time >= since,
-                StudySession.is_active == False,
-                StudySession.flagged == False,
-            )
-            .group_by(StudySession.user_id)
-            .subquery()
-        )
-        quiz_score = (
-            db.query(
-                QuizSession.user_id,
-                func.coalesce(func.sum(QuizSession.verified_quiz_score_earned), 0).label("quiz_score"),
-            )
-            .filter(
-                QuizSession.start_time >= since,
-                QuizSession.is_complete == True,
-            )
-            .group_by(QuizSession.user_id)
-            .subquery()
-        )
-        query = (
-            db.query(
+        if period == LeaderboardPeriod.all_time:
+            query = db.query(
                 User.id.label("user_id"),
                 User.display_name,
                 User.avatar_url,
                 User.country,
                 User.state,
                 User.streak_count,
-                (
-                    func.coalesce(study_score.c.study_score, 0)
-                    + func.coalesce(quiz_score.c.quiz_score, 0) * 0.5
-                ).label("score"),
+                User.points_total.label("score"),
             )
-            .outerjoin(study_score, study_score.c.user_id == User.id)
-            .outerjoin(quiz_score, quiz_score.c.user_id == User.id)
-        )
+        else:
+            study_score = (
+                db.query(
+                    StudySession.user_id,
+                    func.coalesce(func.sum(StudySession.verified_minutes), 0).label("study_score"),
+                )
+                .filter(
+                    StudySession.start_time >= since,
+                    StudySession.is_active == False,
+                    StudySession.flagged == False,
+                )
+                .group_by(StudySession.user_id)
+                .subquery()
+            )
+            quiz_score = (
+                db.query(
+                    QuizSession.user_id,
+                    func.coalesce(func.sum(QuizSession.verified_quiz_score_earned), 0).label("quiz_score"),
+                )
+                .filter(
+                    QuizSession.start_time >= since,
+                    QuizSession.is_complete == True,
+                )
+                .group_by(QuizSession.user_id)
+                .subquery()
+            )
+            query = (
+                db.query(
+                    User.id.label("user_id"),
+                    User.display_name,
+                    User.avatar_url,
+                    User.country,
+                    User.state,
+                    User.streak_count,
+                    (
+                        func.coalesce(study_score.c.study_score, 0)
+                        + func.coalesce(quiz_score.c.quiz_score, 0) * 0.5
+                    ).label("score"),
+                )
+                .outerjoin(study_score, study_score.c.user_id == User.id)
+                .outerjoin(quiz_score, quiz_score.c.user_id == User.id)
+            )
 
     # Apply scope filters
     if scope == LeaderboardScope.country and country:
@@ -153,7 +186,7 @@ def compute_leaderboard(
         )
 
     # Group by user for aggregate-based tracks (exclude JSON columns like exam_tags)
-    if track != LeaderboardTrack.overall:
+    if track != LeaderboardTrack.overall and period != LeaderboardPeriod.all_time:
         query = query.group_by(
             User.id, User.display_name, User.avatar_url,
             User.country, User.state, User.streak_count
@@ -167,6 +200,9 @@ def compute_leaderboard(
 
     leaderboard = []
     for i, row in enumerate(results):
+        score_val = int(row.score or 0)
+        mins = score_val if track == LeaderboardTrack.study else 0
+        quiz_sc = score_val if track == LeaderboardTrack.quiz else 0
         leaderboard.append({
             "rank": offset + i + 1,
             "user_id": str(row.user_id),
@@ -174,8 +210,12 @@ def compute_leaderboard(
             "avatar_url": row.avatar_url,
             "country": row.country,
             "state": row.state,
-            "streak_count": row.streak_count,
-            "score": int(row.score or 0),
+            "streak_count": row.streak_count or 0,
+            "verified_minutes": mins,
+            "verified_minutes_total": mins,
+            "verified_quiz_score": quiz_sc,
+            "points": score_val,
+            "score": score_val,
         })
 
     return leaderboard

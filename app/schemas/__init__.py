@@ -164,6 +164,7 @@ class LeaderboardEntryOut(BaseModel):
     avatar_url: Optional[str] = None
     country: Optional[str] = None
     verified_minutes: int = 0
+    verified_minutes_total: int = 0
     verified_quiz_score: int = 0
     points: int = 0
     rank: Optional[int] = None
