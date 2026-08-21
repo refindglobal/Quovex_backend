@@ -89,6 +89,20 @@ def get_wallet_data(user: User, db: DBSession) -> Dict[str, Any]:
             "type": "quiz"
         })
 
+    # Emergency / Ad Bonuses (if user has added minutes beyond base)
+    if wallet_mins > 120:
+        extra = wallet_mins - 120
+        transactions.append({
+            "id": f"bonus-{user.id}",
+            "title": "Emergency Unlock Pass",
+            "subtitle": "Sponsored Ad Reward",
+            "time_text": "Just now",
+            "group": "Today",
+            "minutes_delta": f"+{extra} min",
+            "is_positive": True,
+            "type": "bonus"
+        })
+
     # Foundation Welcome Gift entry
     transactions.append({
         "id": f"welcome-{user.id}",
