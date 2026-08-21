@@ -310,34 +310,30 @@ def get_user_activity_log(user: User, category: str, db: DBSession) -> Dict[str,
 
     # 3. Wallet Transactions
     if category in ("all", "wallet"):
-        wallet_mins = user.wallet_minutes or 0
-        created_dt = user.created_at.astimezone() if user.created_at and user.created_at.tzinfo else (user.created_at or now)
-        items.append({
-            "id": f"act-wal-{user.id}",
-            "category": "wallet",
-            "title": "Welcome Starter Gift Credited",
-            "time_text": created_dt.strftime("%I:%M %p"),
-            "duration_text": "+30 min Study Wallet",
-            "group": "Today" if user.created_at and user.created_at >= today_start else created_dt.strftime("%d %b"),
-            "icon_type": "wallet",
-            "status": "completed"
-        })
+        wallet_txs = (
+            db.query(StudyWalletTransaction)
+            .filter(StudyWalletTransaction.user_id == user.id)
+            .order_by(desc(StudyWalletTransaction.created_at))
+            .limit(10)
+            .all()
+        )
+        for tx in wallet_txs:
+            tx_date = tx.created_at.astimezone() if tx.created_at.tzinfo else tx.created_at
+            group = "Today" if tx.created_at >= today_start else ("Yesterday" if tx.created_at >= yesterday_start else tx_date.strftime("%d %b"))
+            time_str = tx_date.strftime("%I:%M %p")
+            items.append({
+                "id": f"act-wal-{tx.id}",
+                "category": "wallet",
+                "title": tx.description or ("Emergency Ad Unlock" if tx.transaction_type == "ad_reward" else "Study Wallet Credit"),
+                "time_text": time_str,
+                "duration_text": f"+{tx.minutes_added} min" if tx.minutes_added > 0 else f"-{tx.minutes_used} min",
+                "group": group,
+                "icon_type": "wallet",
+                "status": "completed"
+            })
 
     # 4. System Milestones
     if category in ("all", "system"):
-        created_dt = user.created_at.astimezone() if user.created_at and user.created_at.tzinfo else (user.created_at or now)
-        raw_exam = user.exam_target or "JEE Main"
-        clean_exam = re.sub(r'\b(19|20)\d{2}\b', '', raw_exam).strip() or "JEE Main"
-        items.append({
-            "id": f"act-sys-reg-{user.id}",
-            "category": "system",
-            "title": "Account Activated & Target Set",
-            "time_text": created_dt.strftime("%I:%M %p"),
-            "duration_text": f"Target: {clean_exam}",
-            "group": "Today" if user.created_at and user.created_at >= today_start else created_dt.strftime("%d %b"),
-            "icon_type": "system",
-            "status": "completed"
-        })
         if user.streak_count and user.streak_count > 0:
             items.append({
                 "id": f"act-sys-streak-{user.id}",
