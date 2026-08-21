@@ -25,6 +25,7 @@ from app.schemas import (
     QuizQuestionAdminOut, QuizQuestionUpdateIn,
     RewardOut, PaginatedOut, NotificationComposePush,
     AdminReferralSettingsOut, AdminReferralSettingsIn,
+    SupportTicketListOut, SupportTicketOut, SupportTicketUpdateIn,
 )
 from app.api.v1.rewards import RewardDetailOut
 from app.services.analytics_service import get_geo_breakdown, get_divergence_analysis
