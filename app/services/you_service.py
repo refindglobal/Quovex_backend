@@ -29,7 +29,8 @@ def get_wallet_data(user: User, db: DBSession) -> Dict[str, Any]:
         .all()
     )
     earned_today = sum(s.verified_minutes for s in today_sessions)
-    wallet_mins = user.social_unlock_minutes_today or 0
+    # Use wallet_minutes (cumulative balance) — NOT social_unlock_minutes_today (resets daily)
+    wallet_mins = user.wallet_minutes or 0
 
     # 2. Build real transaction ledger from study sessions and quizzes
     transactions = []
