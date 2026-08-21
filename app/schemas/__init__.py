@@ -487,6 +487,22 @@ class ReferralStatsOut(BaseModel):
     total_referred: int
     bonus_points_earned: int
     pending_referrals: int
+    wallet_minutes_earned: int = 0
+    reward_minutes_per_referral: int = 30
+    reward_points_per_referral: int = 50
+    has_redeemed_code: bool = False
+    referred_by_name: Optional[str] = None
+
+
+class ReferralApplyIn(BaseModel):
+    referral_code: str
+
+
+class ReferralApplyOut(BaseModel):
+    success: bool
+    message: str
+    wallet_minutes_awarded: int
+    referrer_name: Optional[str] = None
 
 
 class ReferralClaimIn(BaseModel):
@@ -501,6 +517,22 @@ class ReferralClaimOut(BaseModel):
 
 class ReferralGenerateOut(BaseModel):
     referral_code: str
+
+
+class AdminReferralSettingsOut(BaseModel):
+    reward_minutes_per_referral: int
+    reward_points_per_referral: int
+    friend_welcome_bonus_minutes: int
+    min_session_minutes_to_unlock: int
+    is_referral_active: bool = True
+
+
+class AdminReferralSettingsIn(BaseModel):
+    reward_minutes_per_referral: Optional[int] = None
+    reward_points_per_referral: Optional[int] = None
+    friend_welcome_bonus_minutes: Optional[int] = None
+    min_session_minutes_to_unlock: Optional[int] = None
+    is_referral_active: Optional[bool] = None
 
 
 # ─── Admin ─────────────────────────────────────────────────────────────────────
@@ -875,3 +907,43 @@ class OcrExtractOut(BaseModel):
     extracted_text: str
     detected_subject: Optional[str] = None
     confidence: float = 0.0
+
+
+# ─── Support & Issue Reporting ───────────────────────────────────────────────
+
+class SupportTicketCreateIn(BaseModel):
+    category: str = Field(..., min_length=2, max_length=100)
+    title: str = Field(..., min_length=3, max_length=255)
+    description: str = Field(..., min_length=5, max_length=5000)
+    contact_email: Optional[str] = None
+    device_info: Optional[dict] = None
+
+
+class SupportTicketOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    user_id: UUID
+    category: str
+    title: str
+    description: str
+    contact_email: Optional[str] = None
+    device_info: Optional[dict] = None
+    status: str
+    priority: str
+    admin_notes: Optional[str] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    resolved_at: Optional[datetime] = None
+
+
+class SupportTicketListOut(BaseModel):
+    total: int
+    tickets: list[SupportTicketOut]
+
+
+class SupportTicketUpdateIn(BaseModel):
+    status: Optional[str] = None
+    priority: Optional[str] = None
+    admin_notes: Optional[str] = None
+

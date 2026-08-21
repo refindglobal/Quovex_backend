@@ -89,6 +89,18 @@ def get_wallet_data(user: User, db: DBSession) -> Dict[str, Any]:
             "type": "quiz"
         })
 
+    if not transactions and wallet_mins > 0:
+        transactions.append({
+            "id": f"welcome-{user.id}",
+            "title": "Welcome Focus Gift",
+            "subtitle": "Onboarding Bonus & Wallet Activation",
+            "time_text": "Active",
+            "group": "Today",
+            "minutes_delta": f"+{wallet_mins} min",
+            "is_positive": True,
+            "type": "welcome"
+        })
+
     return {
         "balance_minutes": wallet_mins,
         "balance_text": f"{wallet_mins} min",
@@ -259,6 +271,48 @@ def get_user_activity_log(user: User, category: str, db: DBSession) -> Dict[str,
                 "status": "completed"
             })
 
+    # 3. Wallet Transactions
+    if category in ("all", "wallet"):
+        wallet_mins = user.wallet_minutes or 0
+        created_dt = user.created_at.astimezone() if user.created_at and user.created_at.tzinfo else (user.created_at or now)
+        items.append({
+            "id": f"act-wal-{user.id}",
+            "category": "wallet",
+            "title": "Welcome Starter Gift Credited",
+            "time_text": created_dt.strftime("%I:%M %p"),
+            "duration_text": "+30 min Study Wallet",
+            "group": "Today" if user.created_at and user.created_at >= today_start else created_dt.strftime("%d %b"),
+            "icon_type": "wallet",
+            "status": "completed"
+        })
+
+    # 4. System Milestones
+    if category in ("all", "system"):
+        created_dt = user.created_at.astimezone() if user.created_at and user.created_at.tzinfo else (user.created_at or now)
+        raw_exam = user.exam_target or "JEE Main"
+        clean_exam = re.sub(r'\b(19|20)\d{2}\b', '', raw_exam).strip() or "JEE Main"
+        items.append({
+            "id": f"act-sys-reg-{user.id}",
+            "category": "system",
+            "title": "Account Activated & Target Set",
+            "time_text": created_dt.strftime("%I:%M %p"),
+            "duration_text": f"Target: {clean_exam}",
+            "group": "Today" if user.created_at and user.created_at >= today_start else created_dt.strftime("%d %b"),
+            "icon_type": "system",
+            "status": "completed"
+        })
+        if user.streak_count and user.streak_count > 0:
+            items.append({
+                "id": f"act-sys-streak-{user.id}",
+                "category": "system",
+                "title": f"{user.streak_count}-Day Streak Milestone",
+                "time_text": "Active",
+                "duration_text": f"{user.streak_count} Days Streak",
+                "group": "Today",
+                "icon_type": "streak",
+                "status": "completed"
+            })
+
     return {
         "filter": category,
         "items": items
@@ -362,24 +416,45 @@ def get_faqs_hub() -> Dict[str, Any]:
         "subtitle": "Everything you need to know about Quovex",
         "faqs": [
             {
-                "question": "How does Study Wallet work?",
-                "answer": "For every 2 minutes of active focus study, you earn 1 minute of social unlock time in your Study Wallet. Distracting apps automatically lock once your balance runs out."
+                "question": "How does the Study Wallet work?",
+                "answer": "For every 1 hour (60 minutes) of verified focus study, you earn 15 minutes of unlock time in your Study Wallet. Reaching 100% of your daily study goal completely unlocks all apps for the rest of the day!"
+            },
+            {
+                "question": "Why is an app still locked?",
+                "answer": "If a blocked app is still locked, check your Study Wallet balance on the Today tab. If your balance is 0 min, start a focus study session to earn more unlock minutes. Also check if Strict Mode is enabled in Focus Settings."
             },
             {
                 "question": "How is study time verified?",
-                "answer": "Quovex monitors active device focus, app lock compliance, and periodic verification checks to ensure pure, distraction-free study time."
+                "answer": "Quovex monitors active device focus, app lock compliance, and periodic heartbeat checks to ensure genuine, distraction-free study time without cheating."
             },
             {
-                "question": "Why is an app still blocked?",
-                "answer": "If an app is still locked, check your Study Wallet balance or verify if Strict Mode is enabled in Focus Settings."
+                "question": "Can I watch lecture videos or use PDF notes while studying?",
+                "answer": "Yes! When starting a session, select Online Lecture Mode or add your educational apps (like YouTube lectures, Physics Wallah, Unacademy, or PDF readers) to the Whitelist."
+            },
+            {
+                "question": "How do I win monthly prizes and rewards?",
+                "answer": "Compete on the Study and Quiz leaderboards. The top 100 students every month win physical prizes including ANC Wireless Headphones, academic book vouchers, and Quovex swag kits."
+            },
+            {
+                "question": "What is Strict Mode vs Smart Mode?",
+                "answer": "Strict Mode blocks apps completely until you earn study minutes. Smart Mode allows emergency overrides with small cooldowns."
             },
             {
                 "question": "How do Study Rooms work?",
                 "answer": "Study Rooms let you study alongside peers in real time with shared timers and live accountability."
             },
             {
-                "question": "What is XP and how do I earn it?",
-                "answer": "XP reflects your study consistency. You earn XP by completing focus sessions, maintaining daily streaks, and acing adaptive quizzes."
+                "question": "How does the AI Doubt Solver work?",
+                "answer": "Go to the Learn tab, tap Ask AI Tutor or take a photo of your textbook problem. The AI generates step-by-step verified explanations, key formulas, and related concepts."
+            },
+            {
+                "question": "What permissions does Quovex require?",
+                "answer": "Quovex requires Usage Access (to detect blocked apps), Display Over Other Apps (for the lock screen overlay), and Notification Access (for study reminders)."
+            },
+            {
+                "question": "How do I report a bug or suggest a feature?",
+                "answer": "Tap 'Report an Issue' at the top of Help & Support. Your ticket will be sent directly to our admin team and reviewed promptly."
             }
         ]
     }
+

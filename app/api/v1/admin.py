@@ -17,13 +17,14 @@ from app.models import (
     User, Session as StudySession, QuizQuestion, QuizSession, Reward, AdminActionLog,
     AdRevenueLog, OTPLog, RewardStatus, RewardType, QuestionStatus, AdminRole,
     LeaderboardSnapshot, LeaderboardTrack, LeaderboardPeriod, LeaderboardScope, NotificationLog,
-    GradeSubject,
+    GradeSubject, SystemSetting,
 )
 from app.schemas import (
     AdminUserListOut, AdminUserDetailOut, AdminUserUpdateIn,
     AdminSessionFlagOut, AdminSessionActionIn, AdminOverviewOut,
     QuizQuestionAdminOut, QuizQuestionUpdateIn,
     RewardOut, PaginatedOut, NotificationComposePush,
+    AdminReferralSettingsOut, AdminReferralSettingsIn,
 )
 from app.api.v1.rewards import RewardDetailOut
 from app.services.analytics_service import get_geo_breakdown, get_divergence_analysis
@@ -1936,6 +1937,70 @@ async def admin_referral_stats(
     )
 
 
+@router.get("/settings/referrals", response_model=AdminReferralSettingsOut)
+async def admin_get_referral_settings(
+    admin=Depends(get_current_admin),
+    db: DBSession = Depends(get_db),
+):
+    """Retrieve current referral reward settings from admin panel."""
+    setting = db.query(SystemSetting).filter(SystemSetting.key == "referral_rewards").first()
+    vals = setting.value if (setting and isinstance(setting.value, dict)) else {}
+    return AdminReferralSettingsOut(
+        reward_minutes_per_referral=int(vals.get("reward_minutes_per_referral", 30)),
+        reward_points_per_referral=int(vals.get("reward_points_per_referral", 50)),
+        friend_welcome_bonus_minutes=int(vals.get("friend_welcome_bonus_minutes", 30)),
+        min_session_minutes_to_unlock=int(vals.get("min_session_minutes_to_unlock", 25)),
+        is_referral_active=bool(vals.get("is_referral_active", True))
+    )
+
+
+@router.put("/settings/referrals", response_model=AdminReferralSettingsOut)
+async def admin_update_referral_settings(
+    body: AdminReferralSettingsIn,
+    admin=Depends(get_current_admin),
+    db: DBSession = Depends(get_db),
+):
+    """Update referral reward amounts (minutes, XP) from admin panel."""
+    setting = db.query(SystemSetting).filter(SystemSetting.key == "referral_rewards").first()
+    if not setting:
+        setting = SystemSetting(
+            key="referral_rewards",
+            value={
+                "reward_minutes_per_referral": 30,
+                "reward_points_per_referral": 50,
+                "friend_welcome_bonus_minutes": 30,
+                "min_session_minutes_to_unlock": 25,
+                "is_referral_active": True
+            },
+            description="Dynamic referral reward parameters"
+        )
+        db.add(setting)
+
+    cur_vals = dict(setting.value)
+    if body.reward_minutes_per_referral is not None:
+        cur_vals["reward_minutes_per_referral"] = max(0, body.reward_minutes_per_referral)
+    if body.reward_points_per_referral is not None:
+        cur_vals["reward_points_per_referral"] = max(0, body.reward_points_per_referral)
+    if body.friend_welcome_bonus_minutes is not None:
+        cur_vals["friend_welcome_bonus_minutes"] = max(0, body.friend_welcome_bonus_minutes)
+    if body.min_session_minutes_to_unlock is not None:
+        cur_vals["min_session_minutes_to_unlock"] = max(1, body.min_session_minutes_to_unlock)
+    if body.is_referral_active is not None:
+        cur_vals["is_referral_active"] = body.is_referral_active
+
+    setting.value = cur_vals
+    db.commit()
+    db.refresh(setting)
+
+    return AdminReferralSettingsOut(
+        reward_minutes_per_referral=int(cur_vals.get("reward_minutes_per_referral", 30)),
+        reward_points_per_referral=int(cur_vals.get("reward_points_per_referral", 50)),
+        friend_welcome_bonus_minutes=int(cur_vals.get("friend_welcome_bonus_minutes", 30)),
+        min_session_minutes_to_unlock=int(cur_vals.get("min_session_minutes_to_unlock", 25)),
+        is_referral_active=bool(cur_vals.get("is_referral_active", True))
+    )
+
+
 @router.get("/referral/users", response_model=list[AdminReferralUserOut])
 async def admin_referral_users(
     search: Optional[str] = Query(None),
@@ -2051,4 +2116,63 @@ async def admin_regenerate_report(
         "new_report_id": str(new_report.id),
         "message": f"Report regenerated successfully",
     }
+
+
+# ─── Support Ticket Management (Admin Panel) ─────────────────────────────────
+
+@router.get("/support/tickets", response_model=SupportTicketListOut)
+async def admin_list_support_tickets(
+    status: Optional[str] = Query(None, description="Filter by status: open, in_progress, resolved, closed"),
+    category: Optional[str] = Query(None, description="Filter by issue category"),
+    priority: Optional[str] = Query(None, description="Filter by priority: low, medium, high, urgent"),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    admin=Depends(get_current_admin),
+    db: DBSession = Depends(get_db)
+):
+    """Admin endpoint to query and manage all user submitted issues."""
+    from app.services import support_service
+    return support_service.list_admin_tickets(
+        db=db,
+        status=status,
+        category=category,
+        priority=priority,
+        limit=limit,
+        offset=offset
+    )
+
+
+@router.get("/support/tickets/{ticket_id}", response_model=SupportTicketOut)
+async def admin_get_support_ticket(
+    ticket_id: UUID,
+    admin=Depends(get_current_admin),
+    db: DBSession = Depends(get_db)
+):
+    """Admin view full details of a specific support ticket."""
+    from app.services import support_service
+    ticket = support_service.get_ticket_by_id(ticket_id=ticket_id, db=db)
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Support ticket not found")
+    return ticket
+
+
+@router.patch("/support/tickets/{ticket_id}", response_model=SupportTicketOut)
+async def admin_update_support_ticket(
+    ticket_id: UUID,
+    body: SupportTicketUpdateIn,
+    admin=Depends(get_current_admin),
+    db: DBSession = Depends(get_db)
+):
+    """Admin update ticket resolution status, priority, and internal notes."""
+    from app.services import support_service
+    ticket = support_service.update_ticket_status(
+        ticket_id=ticket_id,
+        admin_user=admin,
+        data=body,
+        db=db
+    )
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Support ticket not found")
+    return ticket
+
 

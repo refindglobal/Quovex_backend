@@ -649,3 +649,53 @@ class Doubt(Base, TimestampMixin):
     is_bookmarked = Column(Boolean, default=False, nullable=False)
 
     user = relationship("User", backref="doubts")
+
+
+# ─── Support & Issue Reporting ───────────────────────────────────────────────
+
+class TicketStatus(str, enum.Enum):
+    open = "open"
+    in_progress = "in_progress"
+    resolved = "resolved"
+    closed = "closed"
+
+
+class TicketPriority(str, enum.Enum):
+    low = "low"
+    medium = "medium"
+    high = "high"
+    urgent = "urgent"
+
+
+class SupportTicket(Base, TimestampMixin):
+    """Support ticket / issue report submitted by students."""
+    __tablename__ = "support_tickets"
+
+    id = Column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(Uuid(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    category = Column(String(100), nullable=False, default="General", index=True)
+    title = Column(String(255), nullable=False)
+    description = Column(Text, nullable=False)
+    contact_email = Column(String(255), nullable=True)
+
+    # Device & app telemetry metadata
+    device_info = Column(JSON, nullable=True, default=dict)
+
+    status = Column(SAEnum(TicketStatus), nullable=False, default=TicketStatus.open, index=True)
+    priority = Column(SAEnum(TicketPriority), nullable=False, default=TicketPriority.medium)
+
+    admin_notes = Column(Text, nullable=True)
+    resolved_at = Column(DateTime(timezone=True), nullable=True)
+    resolved_by = Column(Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True)
+
+    user = relationship("User", foreign_keys=[user_id], backref="support_tickets")
+
+
+class SystemSetting(Base, TimestampMixin):
+    __tablename__ = "system_settings"
+
+    key = Column(String(100), primary_key=True, index=True)
+    value = Column(JSON, nullable=False)
+    description = Column(String(255), nullable=True)
+
