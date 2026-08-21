@@ -117,46 +117,69 @@ def get_wallet_data(user: User, db: DBSession) -> Dict[str, Any]:
 
 def get_my_rewards(user: User, db: DBSession) -> Dict[str, Any]:
     """Retrieve monthly leaderboard prize competition & reward status (Screen 4)."""
-    # Calculate real monthly rank
     from app.services.leaderboard_service import get_user_rank
     real_rank = get_user_rank(str(user.id), track="overall", timeframe="month", db=db) or 1
 
+    # Check if user has any real claimed rewards in database
+    from app.models import Reward, RewardStatus
+    user_claims = (
+        db.query(Reward)
+        .filter(Reward.user_id == user.id)
+        .order_by(Reward.created_at.desc())
+        .all()
+    )
+
+    rewards_list = []
+    for claim in user_claims:
+        rewards_list.append({
+            "id": str(claim.id),
+            "title": claim.title or "Reward Item",
+            "tier": "Claimed Prize",
+            "status": "Claimed" if claim.status == RewardStatus.CLAIMED else ("Dispatched" if claim.status == RewardStatus.DISPATCHED else "Completed"),
+            "est_delivery": claim.tracking_number or "In Verification",
+            "points_cost": claim.points_cost or 0,
+            "icon_type": "voucher" if "voucher" in (claim.title or "").lower() else "gift_box",
+            "description": claim.description or "User claimed reward."
+        })
+
+    competition_prizes = [
+        {
+            "id": "comp-1",
+            "title": "Study Headphones",
+            "tier": "Rank #1 Prize",
+            "status": "Rank #1 Required",
+            "est_delivery": "Month-End Prize",
+            "points_cost": 50000,
+            "icon_type": "headphones",
+            "description": "Premium Active Noise Cancelling Wireless Headphones for the #1 monthly scholar."
+        },
+        {
+            "id": "comp-2",
+            "title": "Book Voucher ₹3,000",
+            "tier": "Rank #2 Prize",
+            "status": "Rank #2 Required",
+            "est_delivery": "Month-End Prize",
+            "points_cost": 30000,
+            "icon_type": "voucher",
+            "description": "Amazon / Flipkart academic book voucher for the #2 monthly scholar."
+        },
+        {
+            "id": "comp-3",
+            "title": "Quovex Swag Kit",
+            "tier": "Rank #3 Prize",
+            "status": "Rank #3 Required",
+            "est_delivery": "Month-End Prize",
+            "points_cost": 15000,
+            "icon_type": "gift_box",
+            "description": "Custom study hoodie, bottle, notebook, and stickers for the #3 monthly scholar."
+        }
+    ]
+
     return {
         "monthly_rank": real_rank,
-        "monthly_rank_text": f"You are currently #{real_rank}",
-        "leaderboard_tagline": "Top 10 monthly rankers win physical rewards!",
-        "rewards": [
-            {
-                "id": "rew-1",
-                "title": "Study Headphones",
-                "tier": "1st Prize",
-                "status": "In Progress" if real_rank <= 10 else "Locked",
-                "est_delivery": "End of Month",
-                "points_cost": 50000,
-                "icon_type": "headphones",
-                "description": "Premium Active Noise Cancelling Wireless Headphones for deep focus study."
-            },
-            {
-                "id": "rew-2",
-                "title": "Book Voucher ₹3,000",
-                "tier": "2nd Prize",
-                "status": "In Progress" if real_rank <= 25 else "Locked",
-                "est_delivery": "End of Month",
-                "points_cost": 30000,
-                "icon_type": "voucher",
-                "description": "Amazon / Flipkart academic book voucher redeemable across all textbook stores."
-            },
-            {
-                "id": "rew-3",
-                "title": "Quovex Swag Kit",
-                "tier": "3rd Prize",
-                "status": "In Progress" if real_rank <= 50 else "Locked",
-                "est_delivery": "End of Month",
-                "points_cost": 15000,
-                "icon_type": "gift_box",
-                "description": "Custom Quovex study hoodie, insulated bottle, notebook, and sticker pack."
-            }
-        ]
+        "monthly_rank_text": f"Your Current Monthly Rank: #{real_rank}",
+        "leaderboard_tagline": "Rank in Top 3 at month-end to win physical prizes!",
+        "rewards": rewards_list + competition_prizes
     }
 
 
