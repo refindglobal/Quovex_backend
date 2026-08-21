@@ -89,17 +89,17 @@ def get_wallet_data(user: User, db: DBSession) -> Dict[str, Any]:
             "type": "quiz"
         })
 
-    if not transactions and wallet_mins > 0:
-        transactions.append({
-            "id": f"welcome-{user.id}",
-            "title": "Welcome Focus Gift",
-            "subtitle": "Onboarding Bonus & Wallet Activation",
-            "time_text": "Active",
-            "group": "Today",
-            "minutes_delta": f"+{wallet_mins} min",
-            "is_positive": True,
-            "type": "welcome"
-        })
+    # Foundation Welcome Gift entry
+    transactions.append({
+        "id": f"welcome-{user.id}",
+        "title": "Welcome Focus Gift",
+        "subtitle": "Onboarding Bonus & Wallet Activation",
+        "time_text": "Active",
+        "group": "Today",
+        "minutes_delta": "+120 min",
+        "is_positive": True,
+        "type": "welcome"
+    })
 
     return {
         "balance_minutes": wallet_mins,
